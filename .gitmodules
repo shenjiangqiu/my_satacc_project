@@ -1,0 +1,21 @@
+[submodule "spdlog"]
+	path = spdlog
+	url = https://github.com/shenjiangqiu/spdlog.git
+[submodule "minisat"]
+	path = minisat
+	url = https://github.com/shenjiangqiu/minisat.git
+[submodule "satacc"]
+	path = satacc
+	url = https://github.com/shenjiangqiu/satacc.git
+[submodule "fmt"]
+	path = fmt
+	url = https://github.com/fmtlib/fmt.git
+[submodule "DRAMsim3"]
+	path = DRAMsim3
+	url = https://github.com/shenjiangqiu/DRAMsim3.git
+[submodule "sjqcache"]
+	path = sjqcache
+	url = https://github.com/shenjiangqiu/sjqcache.git
+[submodule "minisat_utils"]
+	path = minisat_utils
+	url = https://github.com/shenjiangqiu/minisat_utils.git
