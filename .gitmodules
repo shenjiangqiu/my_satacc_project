@@ -19,3 +19,6 @@
 [submodule "minisat_utils"]
 	path = minisat_utils
 	url = https://github.com/shenjiangqiu/minisat_utils.git
+[submodule "mem_req_interface"]
+	path = mem_req_interface
+	url = https://github.com/shenjiangqiu/mem_req_interface.git

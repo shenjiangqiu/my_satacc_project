@@ -1,6 +1,7 @@
 cmake_minimum_required(VERSION 3.10)
 project(my_satacc_project)
 add_subdirectory(fmt)
+add_subdirectory(mem_req_interface)
 add_subdirectory(minisat_utils)
 add_subdirectory(sjqcache)
 add_subdirectory(DRAMsim3)
