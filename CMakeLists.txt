@@ -1,5 +1,7 @@
 cmake_minimum_required(VERSION 3.10)
 project(my_satacc_project)
+set(CMAKE_CXX_STANDARD 17)
+
 add_subdirectory(fmt)
 add_subdirectory(mem_req_interface)
 add_subdirectory(minisat_utils)
