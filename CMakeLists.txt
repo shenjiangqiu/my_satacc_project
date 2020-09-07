@@ -1,6 +1,7 @@
 cmake_minimum_required(VERSION 3.5)
 project(my_satacc_project)
 set(CMAKE_CXX_STANDARD 17)
+
 add_subdirectory(sjqutils)
 add_subdirectory(fmt)
 add_subdirectory(mem_req_interface)
