@@ -24,7 +24,7 @@
 	url = https://github.com/shenjiangqiu/mem_req_interface.git
 [submodule "sjqutils"]
 	path = sjqutils
-	url = http://husky.sabu.mtu.edu/jshen2/sjqutils.git
+	url = https://github.com/shenjiangqiu/sjqutils.git
 [submodule "gpgpu_intersim"]
 	path = gpgpu_intersim
-	url = http://husky.sabu.mtu.edu/jshen2/gpgpu_intersim.git
+	url = https://github.com/shenjiangqiu/gpgpu_intersim.git
