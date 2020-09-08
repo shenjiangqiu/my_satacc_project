@@ -4,7 +4,9 @@
             "name": "Linux",
             "includePath": [
                 "${workspaceFolder}/**",
-                "${workspaceFolder}/satacc/include"
+                "${workspaceFolder}/satacc/include",
+                "${workspaceFolder}/sjqutils/**",
+                "${workspaceFolder}/mem_req_interface/**"
             ],
             "defines": [],
             "compilerPath": "/usr/bin/gcc",
