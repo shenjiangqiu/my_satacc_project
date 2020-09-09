@@ -64,6 +64,8 @@
         "random": "cpp",
         "set": "cpp",
         "variant": "cpp",
-        "valarray": "cpp"
+        "valarray": "cpp",
+        "forward_list": "cpp",
+        "ciso646": "cpp"
     }
 }

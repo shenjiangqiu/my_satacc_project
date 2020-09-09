@@ -24,6 +24,71 @@
                     "ignoreFailures": true
                 }
             ]
+        },
+        {
+            "name": "(gdb) main_test acc",
+            "type": "cppdbg",
+            "request": "launch",
+            "program": "${workspaceFolder}/build/satacc/main_test",
+            "args": [
+                "-e",
+                "acc"
+            ],
+            "stopAtEntry": false,
+            "cwd": "${workspaceFolder}/build",
+            "environment": [],
+            "externalConsole": false,
+            "MIMode": "gdb",
+            "setupCommands": [
+                {
+                    "description": "Enable pretty-printing for gdb",
+                    "text": "-enable-pretty-printing",
+                    "ignoreFailures": true
+                }
+            ]
+        },
+        {
+            "name": "(gdb) main_test simple acc",
+            "type": "cppdbg",
+            "request": "launch",
+            "program": "${workspaceFolder}/build/satacc/simple_test/simple_test",
+            "args": [
+            ],
+            "stopAtEntry": false,
+            "cwd": "${workspaceFolder}/build/satacc/simple_test/",
+            "environment": [],
+            "externalConsole": false,
+            "MIMode": "gdb",
+            "setupCommands": [
+                {
+                    "description": "Enable pretty-printing for gdb",
+                    "text": "-enable-pretty-printing",
+                    "ignoreFailures": true
+                }
+            ]
+        },
+        {
+            "name": "(gdb) minisat",
+            "type": "cppdbg",
+            "request": "launch",
+            "program": "${workspaceFolder}/build/minisat/minisat",
+            "args": [
+                "-enable-acc",
+                "-end-prop=100",
+                "~/cnfs/b1904P1-8x8c6h5SAT.cnf"
+            ],
+            "stopAtEntry": false,
+            "cwd": "${workspaceFolder}/build/minisat/",
+            "environment": [],
+            "externalConsole": false,
+            "MIMode": "gdb",
+            "setupCommands": [
+                {
+                    "description": "Enable pretty-printing for gdb",
+                    "text": "-enable-pretty-printing",
+                    "ignoreFailures": true
+                }
+            ]
         }
     ]
 }
