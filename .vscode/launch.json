@@ -52,8 +52,7 @@
             "type": "cppdbg",
             "request": "launch",
             "program": "${workspaceFolder}/build/satacc/simple_test/simple_test",
-            "args": [
-            ],
+            "args": [],
             "stopAtEntry": false,
             "cwd": "${workspaceFolder}/build/satacc/simple_test/",
             "environment": [],
@@ -77,6 +76,30 @@
                 "-end-prop=100",
                 "~/cnfs/b1904P1-8x8c6h5SAT.cnf"
             ],
+            "stopAtEntry": false,
+            "cwd": "${workspaceFolder}/build/minisat/",
+            "environment": [],
+            "externalConsole": false,
+            "MIMode": "gdb",
+            "setupCommands": [
+                {
+                    "description": "Enable pretty-printing for gdb",
+                    "text": "-enable-pretty-printing",
+                    "ignoreFailures": true
+                }
+            ]
+        },
+        {
+            "name": "(gdb) minisat core dump",
+            "type": "cppdbg",
+            "request": "launch",
+            "program": "${workspaceFolder}/build/minisat/minisat",
+            "args": [
+                "-enable-acc",
+                "-end-prop=100",
+                "~/cnfs/b1904P1-8x8c6h5SAT.cnf"
+            ],
+            "coreDumpPath": "/home/jshen/core.minisat.40350.f4ee5ec977234c6d92b94b28668ef1d7.3493036.1600099020000000000000",
             "stopAtEntry": false,
             "cwd": "${workspaceFolder}/build/minisat/",
             "environment": [],
