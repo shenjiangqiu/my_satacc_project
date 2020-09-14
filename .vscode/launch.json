@@ -8,7 +8,7 @@
             "name": "(gdb) main_test intersim",
             "type": "cppdbg",
             "request": "launch",
-            "program": "${workspaceFolder}/build/satacc/main_test",
+            "program": "${workspaceFolder}/build/satacc/test/main_test",
             "args": [
                 "intersim"
             ],
