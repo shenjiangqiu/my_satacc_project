@@ -66,6 +66,12 @@
         "variant": "cpp",
         "valarray": "cpp",
         "forward_list": "cpp",
-        "ciso646": "cpp"
+        "ciso646": "cpp",
+        "format": "cpp",
+        "csignal": "cpp",
+        "bit": "cpp",
+        "codecvt": "cpp",
+        "unordered_set": "cpp",
+        "shared_mutex": "cpp"
     }
 }
