@@ -8,7 +8,7 @@
             "name": "(gdb) main_test intersim",
             "type": "cppdbg",
             "request": "launch",
-            "program": "${workspaceFolder}/build/satacc/main_test",
+            "program": "${workspaceFolder}/build/satacc/test/main_test",
             "args": [
                 "intersim"
             ],
@@ -52,8 +52,7 @@
             "type": "cppdbg",
             "request": "launch",
             "program": "${workspaceFolder}/build/satacc/simple_test/simple_test",
-            "args": [
-            ],
+            "args": [],
             "stopAtEntry": false,
             "cwd": "${workspaceFolder}/build/satacc/simple_test/",
             "environment": [],
@@ -74,6 +73,30 @@
             "program": "${workspaceFolder}/build/new_intersim/intersim_test",
             "args": [
             ],
+            "stopAtEntry": false,
+            "cwd": "${workspaceFolder}/build/minisat/",
+            "environment": [],
+            "externalConsole": false,
+            "MIMode": "gdb",
+            "setupCommands": [
+                {
+                    "description": "Enable pretty-printing for gdb",
+                    "text": "-enable-pretty-printing",
+                    "ignoreFailures": true
+                }
+            ]
+        },
+        {
+            "name": "(gdb) minisat core dump",
+            "type": "cppdbg",
+            "request": "launch",
+            "program": "${workspaceFolder}/build/minisat/minisat",
+            "args": [
+                "-enable-acc",
+                "-end-prop=100",
+                "~/cnfs/b1904P1-8x8c6h5SAT.cnf"
+            ],
+            "coreDumpPath": "/home/jshen/coredump/core.minisat.40350.f4ee5ec977234c6d92b94b28668ef1d7.3356619.1600493537000000000000",
             "stopAtEntry": false,
             "cwd": "${workspaceFolder}/build/minisat/",
             "environment": [],
