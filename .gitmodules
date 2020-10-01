@@ -28,3 +28,6 @@
 [submodule "gpgpu_intersim"]
 	path = gpgpu_intersim
 	url = https://github.com/shenjiangqiu/gpgpu_intersim.git
+[submodule "new_intersim"]
+	path = new_intersim
+	url = https://github.com/shenjiangqiu/new_intersim.git

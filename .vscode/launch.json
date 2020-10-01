@@ -68,14 +68,11 @@
             ]
         },
         {
-            "name": "(gdb) minisat",
+            "name": "(gdb) intersim test",
             "type": "cppdbg",
             "request": "launch",
-            "program": "${workspaceFolder}/build/minisat/minisat",
+            "program": "${workspaceFolder}/build/new_intersim/intersim_test",
             "args": [
-                "-enable-acc",
-                "-end-prop=100",
-                "~/cnfs/b1904P1-8x8c6h5SAT.cnf"
             ],
             "stopAtEntry": false,
             "cwd": "${workspaceFolder}/build/minisat/",

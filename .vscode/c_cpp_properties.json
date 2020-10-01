@@ -6,14 +6,15 @@
                 "${workspaceFolder}/**",
                 "${workspaceFolder}/satacc/include",
                 "${workspaceFolder}/sjqutils/**",
-                "${workspaceFolder}/mem_req_interface/**"
+                "${workspaceFolder}/mem_req_interface/**",
+                "${workspaceFolder}/new_intersim/include/**",
+                "${workspaceFolder}/mem_req_interface"
             ],
             "defines": [],
             "compilerPath": "/usr/bin/gcc",
             "cStandard": "c11",
             "cppStandard": "c++17",
-            "intelliSenseMode": "gcc-x64",
-            "configurationProvider": "ms-vscode.cmake-tools"
+            "intelliSenseMode": "gcc-x64"
         }
     ],
     "version": 4
