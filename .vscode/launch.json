@@ -5,12 +5,13 @@
     "version": "0.2.0",
     "configurations": [
         {
-            "name": "(gdb) main_test intersim",
+            "name": "(gdb) main_test mem_req_icnt",
             "type": "cppdbg",
             "request": "launch",
             "program": "${workspaceFolder}/build/satacc/test/main_test",
             "args": [
-                "intersim"
+                "-e",
+                "mem_req_icnt"
             ],
             "stopAtEntry": false,
             "cwd": "${workspaceFolder}/build",
@@ -29,13 +30,12 @@
             "name": "(gdb) main_test acc",
             "type": "cppdbg",
             "request": "launch",
-            "program": "${workspaceFolder}/build/satacc/main_test",
+            "program": "${workspaceFolder}/build/satacc/test/main_test",
             "args": [
-                "-e",
                 "acc"
             ],
             "stopAtEntry": false,
-            "cwd": "${workspaceFolder}/build",
+            "cwd": "${workspaceFolder}/build/satacc/test",
             "environment": [],
             "externalConsole": false,
             "MIMode": "gdb",
@@ -71,8 +71,7 @@
             "type": "cppdbg",
             "request": "launch",
             "program": "${workspaceFolder}/build/new_intersim/intersim_test",
-            "args": [
-            ],
+            "args": [],
             "stopAtEntry": false,
             "cwd": "${workspaceFolder}/build/minisat/",
             "environment": [],

@@ -68,7 +68,13 @@
         "forward_list": "cpp",
         "ciso646": "cpp",
         "climits": "cpp",
-        "*.ipp": "cpp"
+        "*.ipp": "cpp",
+        "format": "cpp",
+        "csignal": "cpp",
+        "bit": "cpp",
+        "codecvt": "cpp",
+        "unordered_set": "cpp",
+        "shared_mutex": "cpp"
     },
     "cmake.configureSettings": {
         "SJQDEBUG": "OFF"
