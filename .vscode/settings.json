@@ -77,6 +77,8 @@
         "shared_mutex": "cpp"
     },
     "cmake.configureSettings": {
-        "SJQDEBUG": "OFF"
+        "SJQDEBUG": "OFF",
+        "SJQ_ICNT_DEBUG":"ON"
+
     }
 }
