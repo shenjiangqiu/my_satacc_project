@@ -74,7 +74,11 @@
         "bit": "cpp",
         "codecvt": "cpp",
         "unordered_set": "cpp",
-        "shared_mutex": "cpp"
+        "shared_mutex": "cpp",
+        "compare": "cpp",
+        "concepts": "cpp",
+        "ranges": "cpp",
+        "stop_token": "cpp"
     },
     "cmake.configureSettings": {
         "SJQDEBUG": "OFF",
