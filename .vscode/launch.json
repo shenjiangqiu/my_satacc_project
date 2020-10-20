@@ -108,6 +108,29 @@
                     "ignoreFailures": true
                 }
             ]
+        },
+        {
+            "name": "(gdb) minisat ",
+            "type": "cppdbg",
+            "request": "launch",
+            "program": "${workspaceFolder}/build/minisat/minisat",
+            "args": [
+                "-enable-acc",
+                "-end-prop=100",
+                "~/cnfs/b1904P1-8x8c6h5SAT.cnf"
+            ],
+            "stopAtEntry": false,
+            "cwd": "${workspaceFolder}/build/minisat/",
+            "environment": [],
+            "externalConsole": false,
+            "MIMode": "gdb",
+            "setupCommands": [
+                {
+                    "description": "Enable pretty-printing for gdb",
+                    "text": "-enable-pretty-printing",
+                    "ignoreFailures": true
+                }
+            ]
         }
     ]
 }
