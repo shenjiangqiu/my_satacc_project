@@ -95,7 +95,6 @@
                 "-end-prop=100",
                 "~/cnfs/b1904P1-8x8c6h5SAT.cnf"
             ],
-            "coreDumpPath": "/home/jshen/coredump/core.minisat.40350.f4ee5ec977234c6d92b94b28668ef1d7.3356619.1600493537000000000000",
             "stopAtEntry": false,
             "cwd": "${workspaceFolder}/build/minisat/",
             "environment": [],
