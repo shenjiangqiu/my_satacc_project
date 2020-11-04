@@ -84,5 +84,6 @@
         "SJQDEBUG": "OFF",
         "SJQ_ICNT_DEBUG":"ON"
 
-    }
+    },
+    "cmake.configureOnOpen": false
 }
