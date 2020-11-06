@@ -92,9 +92,10 @@
             "program": "${workspaceFolder}/build/minisat/minisat",
             "args": [
                 "-enable-acc",
-                "-end-prop=100",
+                "-end-prop=10000",
                 "~/cnfs/b1904P1-8x8c6h5SAT.cnf"
             ],
+            "coreDumpPath": "/home/sjq/exp_result/mesh_origin/b1904P1-8x8c6h5SAT.cnf/core",
             "stopAtEntry": false,
             "cwd": "${workspaceFolder}/build/minisat/",
             "environment": [],
