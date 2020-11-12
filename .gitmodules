@@ -31,3 +31,6 @@
 [submodule "new_intersim"]
 	path = new_intersim
 	url = https://github.com/shenjiangqiu/new_intersim.git
+[submodule "ramulator"]
+	path = ramulator
+	url = https://github.com/shenjiangqiu/ramulator.git
