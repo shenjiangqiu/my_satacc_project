@@ -8,7 +8,9 @@
                 "${workspaceFolder}/sjqutils/**",
                 "${workspaceFolder}/mem_req_interface/**",
                 "${workspaceFolder}/new_intersim/include/**",
-                "${workspaceFolder}/mem_req_interface"
+                "${workspaceFolder}/mem_req_interface",
+                "${workspaceFolder}/ramulator/**"
+                
             ],
             "defines": [],
             "compilerPath": "/usr/bin/gcc",

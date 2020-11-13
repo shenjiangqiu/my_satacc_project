@@ -32,6 +32,7 @@
             "request": "launch",
             "program": "${workspaceFolder}/build/satacc/test/main_test",
             "args": [
+                "-e",
                 "acc"
             ],
             "stopAtEntry": false,
