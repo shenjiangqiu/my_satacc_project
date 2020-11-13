@@ -34,3 +34,6 @@
 [submodule "ramulator"]
 	path = ramulator
 	url = https://github.com/shenjiangqiu/ramulator.git
+[submodule "histogram"]
+	path = histogram
+	url = https://github.com/shenjiangqiu/histogram.git
