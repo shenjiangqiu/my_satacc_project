@@ -1,6 +1,8 @@
 cmake_minimum_required(VERSION 3.5)
 project(my_satacc_project)
 set(CMAKE_CXX_STANDARD 17)
+set(CMAKE_CXX_FLAGS_RELEASE "-g -O3")
+set(CMAKE_CXX_FLAGS_DEBUG "-g -O0")
 
 add_subdirectory(sjqutils)
 add_subdirectory(fmt)

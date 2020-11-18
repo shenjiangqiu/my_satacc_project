@@ -92,8 +92,9 @@
             "request": "launch",
             "program": "${workspaceFolder}/build/minisat/minisat",
             "args": [
-                "-end-prop=10000",
-                "~/cnfs/b1904P1-8x8c6h5SAT.cnf"
+                "-enable-acc",
+                "-end-prop=200",
+                "~/cnfs/ASG_96_len112_known_last12_2.cnf"
             ],
             
             "stopAtEntry": false,
