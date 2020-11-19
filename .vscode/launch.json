@@ -33,7 +33,7 @@
             "program": "${workspaceFolder}/build/satacc/test/main_test",
             "args": [
                 "-e",
-                "acc"
+                "mesh"
             ],
             "stopAtEntry": false,
             "cwd": "${workspaceFolder}/build/satacc/test",
