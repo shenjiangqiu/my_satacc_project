@@ -93,6 +93,7 @@
             "program": "${workspaceFolder}/build/minisat/minisat",
             "args": [
                 "-enable-acc",
+                "-seqacc",
                 "-end-prop=2000",
                 "~/cnfs/ASG_96_len112_known_last12_2.cnf"
             ],

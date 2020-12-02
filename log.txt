@@ -1,0 +1,4 @@
+add write miss read traffic.
+add watcher writer read meta data
+add clause writer read meta data?
+add watcher level sequential
