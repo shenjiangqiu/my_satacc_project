@@ -1,0 +1,19 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<project version="4">
+  <component name="VcsDirectoryMappings">
+    <mapping directory="$PROJECT_DIR$" vcs="Git" />
+    <mapping directory="$PROJECT_DIR$/DRAMsim3" vcs="Git" />
+    <mapping directory="$PROJECT_DIR$/DRAMsim3/ext/SuperLU_MT_3.1" vcs="Git" />
+    <mapping directory="$PROJECT_DIR$/fmt" vcs="Git" />
+    <mapping directory="$PROJECT_DIR$/gpgpu_intersim" vcs="Git" />
+    <mapping directory="$PROJECT_DIR$/mem_req_interface" vcs="Git" />
+    <mapping directory="$PROJECT_DIR$/minisat" vcs="Git" />
+    <mapping directory="$PROJECT_DIR$/minisat_utils" vcs="Git" />
+    <mapping directory="$PROJECT_DIR$/new_intersim" vcs="Git" />
+    <mapping directory="$PROJECT_DIR$/ramulator" vcs="Git" />
+    <mapping directory="$PROJECT_DIR$/satacc" vcs="Git" />
+    <mapping directory="$PROJECT_DIR$/sjqcache" vcs="Git" />
+    <mapping directory="$PROJECT_DIR$/sjqutils" vcs="Git" />
+    <mapping directory="$PROJECT_DIR$/spdlog" vcs="Git" />
+  </component>
+</project>
