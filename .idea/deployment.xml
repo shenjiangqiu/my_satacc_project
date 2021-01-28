@@ -1,0 +1,25 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<project version="4">
+  <component name="PublishConfigData" remoteFilesAllowedToDisappearOnAutoupload="false">
+    <serverData>
+      <paths name="WSL (727f0fb3-6425-40c6-92ea-5d81c00933ee)">
+        <serverdata>
+          <mappings>
+            <mapping local="$PROJECT_DIR$" web="/" />
+          </mappings>
+        </serverdata>
+      </paths>
+      <paths name="husky3 (2f77db4d-3cfb-444c-9945-b21137ddee14)">
+        <serverdata>
+          <mappings>
+            <mapping deploy="/tmp/tmp.ELhB2YCxw7" local="$PROJECT_DIR$" />
+          </mappings>
+          <excludedPaths>
+            <excludedPath local="true" path="$PROJECT_DIR$/cmake-build-release" />
+            <excludedPath local="true" path="$PROJECT_DIR$/cmake-build-debug" />
+          </excludedPaths>
+        </serverdata>
+      </paths>
+    </serverData>
+  </component>
+</project>
