@@ -78,7 +78,9 @@
         "compare": "cpp",
         "concepts": "cpp",
         "ranges": "cpp",
-        "stop_token": "cpp"
+        "stop_token": "cpp",
+        "any": "cpp",
+        "span": "cpp"
     },
     "cmake.configureSettings": {
         "SJQDEBUG": "OFF",
