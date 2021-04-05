@@ -5,7 +5,6 @@ set(CMAKE_CXX_FLAGS_RELEASE "-g -O3 -DNDEBUG")
 set(CMAKE_CXX_FLAGS_DEBUG "-g -O0")
 
 add_subdirectory(sjqutils)
-add_subdirectory(fmt)
 add_subdirectory(mem_req_interface)
 add_subdirectory(minisat_utils)
 add_subdirectory(sjqcache)

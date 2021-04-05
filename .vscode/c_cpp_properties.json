@@ -1,22 +1,17 @@
 {
     "configurations": [
         {
-            "name": "Linux",
+            "name": "Mac",
             "includePath": [
-                "${workspaceFolder}/**",
-                "${workspaceFolder}/satacc/include",
-                "${workspaceFolder}/sjqutils/**",
-                "${workspaceFolder}/mem_req_interface/**",
-                "${workspaceFolder}/new_intersim/include/**",
-                "${workspaceFolder}/mem_req_interface",
-                "${workspaceFolder}/ramulator/**"
-                
+                "${workspaceFolder}/**"
             ],
             "defines": [],
-            "compilerPath": "/usr/bin/gcc",
-            "cStandard": "c11",
+            "macFrameworkPath": [],
+            "compilerPath": "/opt/homebrew/bin/gcc-10",
+            "cStandard": "gnu17",
             "cppStandard": "c++17",
-            "intelliSenseMode": "gcc-x64"
+            "intelliSenseMode": "macos-gcc-arm64",
+            "compileCommands": "build/compile_commands.json"
         }
     ],
     "version": 4
