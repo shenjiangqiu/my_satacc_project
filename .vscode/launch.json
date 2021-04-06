@@ -5,7 +5,7 @@
     "version": "0.2.0",
     "configurations": [
         {
-            "name": "(gdb) main_test mem_req_icnt",
+            "name": "(lldb) main_test mem_req_icnt",
             "type": "cppdbg",
             "request": "launch",
             "program": "${workspaceFolder}/build/satacc/test/main_test",
@@ -16,8 +16,9 @@
             "stopAtEntry": false,
             "cwd": "${workspaceFolder}/build",
             "environment": [],
+            "miDebuggerPath": "/usr/bin/lldb",
             "externalConsole": false,
-            "MIMode": "gdb",
+            "MIMode": "lldb",
             "setupCommands": [
                 {
                     "description": "Enable pretty-printing for gdb",
@@ -27,10 +28,11 @@
             ]
         },
         {
-            "name": "(gdb) main_test acc",
+            "name": "(lldb) main_test acc",
             "type": "cppdbg",
             "request": "launch",
             "program": "${workspaceFolder}/build/satacc/test/main_test",
+            "targetArchitecture": "arm64",
             "args": [
                 "-e",
                 "mesh"
@@ -39,14 +41,7 @@
             "cwd": "${workspaceFolder}/build/satacc/test",
             "environment": [],
             "externalConsole": false,
-            "MIMode": "gdb",
-            "setupCommands": [
-                {
-                    "description": "Enable pretty-printing for gdb",
-                    "text": "-enable-pretty-printing",
-                    "ignoreFailures": true
-                }
-            ]
+            "MIMode": "lldb",
         },
         {
             "name": "(gdb) main_test simple acc",
