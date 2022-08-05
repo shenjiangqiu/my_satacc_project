@@ -7,10 +7,9 @@
             ],
             "defines": [],
             "macFrameworkPath": [],
-            "compilerPath": "/opt/homebrew/bin/gcc-10",
+            "compilerPath": "/usr/bin/gcc",
             "cStandard": "gnu17",
             "cppStandard": "c++17",
-            "intelliSenseMode": "macos-gcc-arm64",
             "compileCommands": "${workspaceFolder}/build/compile_commands.json"
         }
     ],
