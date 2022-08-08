@@ -84,8 +84,8 @@
     },
     "cmake.configureSettings": {
         "SJQDEBUG": "OFF",
-        "SJQ_ICNT_DEBUG":"ON"
-
+        "SJQ_ICNT_DEBUG": "ON"
     },
-    "cmake.configureOnOpen": false
+    "cmake.configureOnOpen": false,
+    "testMate.cpp.test.executables": "{build,Build,BUILD,out,Out,OUT}/**/*{test,Test,TEST}*"
 }
