@@ -19,9 +19,9 @@ pub(self) fn get_set_number_from_addr(
     addr: u64,
     set_bit_len: u64,
     block_bit_line: u64,
-    channel_bit_len: u64,
+    _channel_bit_len: u64,
 ) -> (u64, u64) {
-    let set_number = (addr >> block_bit_line >> channel_bit_len) & ((1 << set_bit_len) - 1);
+    let set_number = (addr >> block_bit_line) & ((1 << set_bit_len) - 1);
     let tag = addr & !((1 << block_bit_line) - 1);
     (set_number, tag)
 }

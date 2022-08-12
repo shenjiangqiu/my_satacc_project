@@ -25,10 +25,10 @@ watcher_to_writer_icnt = 'Mesh'
 associativity = 4
 block_size = 64
 channels = 1
-sets = 16
+sets = 4
 
 [l3_cache_config]
 associativity = 4
 block_size = 64
-channels = 1
-sets = 16
+channels = 8
+sets = 65536
