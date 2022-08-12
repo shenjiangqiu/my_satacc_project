@@ -1,0 +1,163 @@
+use std::collections::{BTreeMap, BTreeSet, VecDeque};
+
+use crate::{
+    satacc::MemReqType,
+    sim::{InOutPort, SimComponent, SimReciver},
+};
+
+use super::{icnt::IcntMsgWrapper, satacc_minisat_task::ClauseTask, MemReq, SataccStatus};
+
+struct ClauseValueTracker {
+    clause_task: ClauseTask,
+    waiting_to_send_reqs: VecDeque<IcntMsgWrapper<MemReq>>,
+    unfinished_req_id: BTreeSet<usize>,
+}
+pub struct ClauseUnit {
+    watcher_pe_id: usize,
+    total_watchers: usize,
+    clause_pe_id: usize,
+    clause_task_in: SimReciver<IcntMsgWrapper<ClauseTask>>,
+    mem_icnt_port: InOutPort<IcntMsgWrapper<MemReq>>,
+    private_cache_port: InOutPort<IcntMsgWrapper<MemReq>>,
+    clause_data_ready_queue: VecDeque<ClauseTask>,
+    clause_value_ready_queue: VecDeque<ClauseTask>,
+    current_processing_task: Option<(usize, ClauseTask)>,
+    current_reading_value_task: Option<ClauseValueTracker>,
+
+    mem_req_id_to_clause_task: BTreeMap<usize, ClauseTask>,
+}
+impl ClauseUnit {
+    pub fn new(
+        clause_task_in: SimReciver<IcntMsgWrapper<ClauseTask>>,
+        mem_icnt_port: InOutPort<IcntMsgWrapper<MemReq>>,
+        private_cache_port: InOutPort<IcntMsgWrapper<MemReq>>,
+        watcher_pe_id: usize,
+        total_watchers: usize,
+        clause_pe_id: usize,
+    ) -> Self {
+        ClauseUnit {
+            clause_task_in,
+            mem_icnt_port,
+            private_cache_port,
+            clause_data_ready_queue: VecDeque::new(),
+            clause_value_ready_queue: VecDeque::new(),
+            current_processing_task: None,
+            watcher_pe_id,
+            total_watchers,
+            clause_pe_id,
+            current_reading_value_task: None,
+            mem_req_id_to_clause_task: BTreeMap::new(),
+        }
+    }
+}
+
+impl SimComponent for ClauseUnit {
+    type SharedStatus = SataccStatus;
+    fn update(&mut self, context: &mut Self::SharedStatus, current_cycle: usize) -> bool {
+        let mut busy = self.current_processing_task.is_some();
+        // first read the clause data
+        if let Ok(task) = self.clause_task_in.recv() {
+            log::debug!("ClauseUnit Receive task! {current_cycle}");
+            let mem_req = task.msg.get_clause_data_task(
+                context,
+                self.watcher_pe_id,
+                self.clause_pe_id,
+                self.total_watchers,
+            );
+            let id = mem_req.msg.id;
+            match self.mem_icnt_port.out_port.send(mem_req) {
+                Ok(_) => {
+                    self.mem_req_id_to_clause_task.insert(id, task.msg);
+                    busy = true;
+                }
+                Err(_e) => {
+                    // cannot send to cache now
+                    // just ret the task so we don't need the target port
+                    self.clause_task_in.ret(task);
+                }
+            }
+        }
+        // try to start to read the clause value
+        if self.current_reading_value_task.is_none() {
+            if let Some(task) = self.clause_data_ready_queue.pop_front() {
+                let mem_req =
+                    task.get_read_clause_value_task(context, self.watcher_pe_id, self.clause_pe_id);
+                self.current_reading_value_task = Some(ClauseValueTracker {
+                    clause_task: task,
+                    waiting_to_send_reqs: mem_req.into_iter().collect(),
+                    unfinished_req_id: BTreeSet::new(),
+                });
+            }
+        }
+        // process the clause value task
+        if let Some(reqs) = self.current_reading_value_task.as_mut() {
+            if let Some(req) = reqs.waiting_to_send_reqs.pop_front() {
+                let id = req.msg.id;
+                match self.private_cache_port.out_port.send(req) {
+                    Ok(_) => {
+                        busy = true;
+                        reqs.unfinished_req_id.insert(id);
+                    }
+                    Err(e) => {
+                        // cannot send to cache now
+                        // just ret the task so we don't need the target port
+                        reqs.waiting_to_send_reqs.push_front(e);
+                    }
+                }
+            }
+        }
+
+        // then update current process task
+        if let Some((finished_cycle, task)) = self.current_processing_task.take() {
+            busy = true;
+            if finished_cycle >= current_cycle {
+                self.current_processing_task = Some((finished_cycle, task));
+            } else {
+                // finished
+                log::debug!("ClauseUnit finished task! {current_cycle}");
+            }
+        }
+        // then process the value ready task
+        if self.current_processing_task.is_none() {
+            if let Some(task) = self.clause_value_ready_queue.pop_front() {
+                let process_time = task.get_process_time();
+                busy = true;
+                self.current_processing_task = Some((current_cycle + process_time, task));
+            }
+        }
+        // process memory ret
+        if let Ok(mem_req) = self.mem_icnt_port.in_port.recv() {
+            log::debug!("ClauseUnit Receive mem_req! {current_cycle}");
+            match mem_req.msg.req_type {
+                crate::satacc::MemReqType::ClauseReadData(_) => {
+                    let clause_task = self
+                        .mem_req_id_to_clause_task
+                        .remove(&mem_req.msg.id)
+                        .unwrap();
+
+                    self.clause_data_ready_queue.push_back(clause_task);
+                }
+                _ => unreachable!(),
+            }
+            busy = true;
+        }
+        // process private cache ret
+        if let Ok(mem_req) = self.private_cache_port.in_port.recv() {
+            log::debug!("ClauseUnit Receive mem_req! {current_cycle}");
+            match mem_req.msg.req_type {
+                MemReqType::ClauseReadValue(_clause_id) => {
+                    let current_waiting = self.current_reading_value_task.as_mut().unwrap();
+                    current_waiting.unfinished_req_id.remove(&mem_req.msg.id);
+                    if current_waiting.unfinished_req_id.is_empty() {
+                        let current_waiting = self.current_reading_value_task.take().unwrap();
+                        self.clause_value_ready_queue
+                            .push_back(current_waiting.clause_task);
+                    }
+                }
+                _ => unreachable!(),
+            }
+            busy = true;
+        }
+        busy
+    }
+}

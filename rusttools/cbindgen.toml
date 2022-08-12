@@ -100,11 +100,11 @@ bitflags = false
 ############## Options for How Your Rust library Should Be Parsed ##############
 
 [parse]
-parse_deps = false
-# include = []
 clean = false
 exclude = []
 extra_bindings = []
+include = ["ramulator_wrapper"]
+parse_deps = true
 
 [parse.expand]
 all_features = false

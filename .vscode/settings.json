@@ -1,5 +1,7 @@
 {
     "files.associations": {
+        "*.fragmentshader": "glsl",
+        "*.vertexshader": "glsl",
         "*.tcc": "cpp",
         "cassert": "cpp",
         "functional": "cpp",
@@ -80,7 +82,10 @@
         "ranges": "cpp",
         "stop_token": "cpp",
         "any": "cpp",
-        "span": "cpp"
+        "span": "cpp",
+        "source_location": "cpp",
+        "numbers": "cpp",
+        "semaphore": "cpp"
     },
     "cmake.configureSettings": {
         "SJQDEBUG": "OFF",

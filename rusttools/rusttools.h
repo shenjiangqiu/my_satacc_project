@@ -15,6 +15,11 @@
 
 namespace sjqrusttools {
 
+enum class CacheType {
+  Simple,
+  Ramu,
+};
+
 /// the type of the dram that used to read and write data
 enum class DramType {
   DDR4,
@@ -27,6 +32,23 @@ enum class IcntType {
   Ideal,
 };
 
+enum class PresetConfigs {
+  ALDRAM,
+  DDR4,
+  GDDR5,
+  LPDDR3,
+  PCM,
+  STTMRAM,
+  WideIO2,
+  DDR3,
+  DSARP,
+  HBM,
+  LPDDR4,
+  SALP,
+  TLDRAM,
+  WideIO,
+};
+
 /// The type for the watcher sending to the clase
 enum class WatcherToClauseType {
   /// - in this case, the watcher send clause to it's own clause unit
@@ -37,11 +59,24 @@ enum class WatcherToClauseType {
   Icnt,
 };
 
+/// # SataccMinisatTask
+/// the full task of the whole SAT solver
+/// - it contains many decisions in [`SingleRoundTask`]
+struct SataccMinisatTask;
+
+struct CacheConfig {
+  uint64_t sets;
+  uint64_t associativity;
+  uint64_t block_size;
+  uint64_t channels;
+};
+
 /// the config for satacc
 ///
 struct Config {
   WatcherToClauseType watcher_to_clause_type;
   size_t n_watchers;
+  /// the number of clause unit per watcher
   size_t n_clauses;
   size_t mems;
   IcntType icnt;
@@ -57,6 +92,13 @@ struct Config {
   bool single_watcher;
   size_t private_cache_size;
   size_t l3_cache_size;
+  size_t channel_size;
+  CacheType cache_type;
+  PresetConfigs ramu_cache_config;
+  CacheConfig private_cache_config;
+  CacheConfig l3_cache_config;
+  size_t hit_latency;
+  size_t miss_latency;
 };
 
 struct Point {
@@ -72,11 +114,35 @@ struct Rec {
 
 extern "C" {
 
+void add_single_watcher_clause_value_addr(SataccMinisatTask *self,
+                                          uint64_t value_addr,
+                                          size_t clause_id);
+
+void add_single_watcher_task(SataccMinisatTask *self,
+                             uint64_t blocker_addr,
+                             uint64_t clause_addr,
+                             size_t clause_id,
+                             size_t processing_time,
+                             size_t watcher_id);
+
+void add_single_watcher_task_no_clause(SataccMinisatTask *self,
+                                       uint64_t blocker_addr,
+                                       size_t watcher_id);
+
+void add_watcher_task(SataccMinisatTask *self,
+                      uint64_t meta_data_addr,
+                      uint64_t watcher_addr,
+                      size_t watcher_id);
+
 Config config_from_file(const char *path);
+
+SataccMinisatTask *create_empty_task();
 
 int32_t get_x(const Point *self);
 
 int32_t get_y(const Point *self);
+
+void run(SataccMinisatTask *task);
 
 void say_hello(const Point *point, const Rec *rect);
 
@@ -85,6 +151,8 @@ void set_x(Point *self, int32_t x);
 void set_y(Point *self, int32_t y);
 
 void show_config(const Config *self);
+
+void start_new_assgin(SataccMinisatTask *self);
 
 } // extern "C"
 

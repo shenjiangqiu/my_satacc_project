@@ -1,6 +1,8 @@
 use std::ops::Add;
 pub mod config;
-
+pub mod satacc;
+pub mod sim;
+pub(self) mod test_utils;
 // from now all code are for test
 #[no_mangle]
 pub extern "C" fn say_hello(point: &Point, rect: &Rec) {
@@ -54,5 +56,15 @@ impl Add for Point {
             x: self.x + other.x,
             y: self.y + other.y,
         }
+    }
+}
+
+#[cfg(test)]
+mod test {
+    use super::*;
+    use satacc::Simulator;
+    #[test]
+    fn test_simulator() {
+        let _sim = Simulator::new("test_config.toml");
     }
 }

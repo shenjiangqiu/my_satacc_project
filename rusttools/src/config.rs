@@ -1,8 +1,11 @@
 use eyre::{Context, Result};
 use libc::c_char;
+use ramulator_wrapper::PresetConfigs;
 use std::{ffi::CStr, fs};
 
 use serde::{Deserialize, Serialize};
+
+use crate::satacc::CacheConfig;
 
 /// The type for the watcher sending to the clase
 #[repr(C)]
@@ -30,28 +33,42 @@ pub enum IcntType {
     Ring,
     Ideal,
 }
+#[derive(Debug, Deserialize, Serialize)]
+#[repr(C)]
+pub enum CacheType {
+    Simple,
+    Ramu,
+}
 /// the config for satacc
 ///
 #[repr(C)]
 #[derive(Debug, Deserialize, Serialize)]
 pub struct Config {
-    watcher_to_clause_type: WatcherToClauseType,
-    n_watchers: usize,
-    n_clauses: usize,
-    mems: usize,
-    icnt: IcntType,
-    seq: bool,
-    ideal_memory: bool,
-    ideal_l3cache: bool,
-    multi_port: usize,
-    dram_config: DramType,
-    watcher_to_clause_icnt: IcntType,
-    watcher_to_writer_icnt: IcntType,
-    num_writer_entry: usize,
-    num_writer_merge: usize,
-    single_watcher: bool,
-    private_cache_size: usize,
-    l3_cache_size: usize,
+    pub watcher_to_clause_type: WatcherToClauseType,
+    pub n_watchers: usize,
+    /// the number of clause unit per watcher
+    pub n_clauses: usize,
+    pub mems: usize,
+    pub icnt: IcntType,
+    pub seq: bool,
+    pub ideal_memory: bool,
+    pub ideal_l3cache: bool,
+    pub multi_port: usize,
+    pub dram_config: DramType,
+    pub watcher_to_clause_icnt: IcntType,
+    pub watcher_to_writer_icnt: IcntType,
+    pub num_writer_entry: usize,
+    pub num_writer_merge: usize,
+    pub single_watcher: bool,
+    pub private_cache_size: usize,
+    pub l3_cache_size: usize,
+    pub channel_size: usize,
+    pub cache_type: CacheType,
+    pub ramu_cache_config: PresetConfigs,
+    pub private_cache_config: CacheConfig,
+    pub l3_cache_config: CacheConfig,
+    pub hit_latency: usize,
+    pub miss_latency: usize,
 }
 
 impl Config {
