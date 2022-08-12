@@ -63,12 +63,12 @@ pub struct Config {
     pub private_cache_size: usize,
     pub l3_cache_size: usize,
     pub channel_size: usize,
-    pub cache_type: CacheType,
+    pub l3_cache_type: CacheType,
     pub ramu_cache_config: PresetConfigs,
-    pub private_cache_config: CacheConfig,
-    pub l3_cache_config: CacheConfig,
     pub hit_latency: usize,
     pub miss_latency: usize,
+    pub private_cache_config: CacheConfig,
+    pub l3_cache_config: CacheConfig,
 }
 
 impl Config {
@@ -93,5 +93,56 @@ impl Config {
         };
 
         Self::from_config_file(config_file).expect("cannot read config file")
+    }
+}
+
+#[cfg(test)]
+mod test {
+    use std::fs;
+
+    use super::Config;
+
+    #[test]
+    #[ignore]
+    fn test_generate_config_file() {
+        let config = Config {
+            watcher_to_clause_type: super::WatcherToClauseType::Icnt,
+            n_watchers: 16,
+            n_clauses: 1,
+            mems: 8,
+            icnt: super::IcntType::Mesh,
+            seq: false,
+            ideal_memory: false,
+            ideal_l3cache: false,
+            multi_port: 1,
+            dram_config: super::DramType::HBM,
+            watcher_to_clause_icnt: super::IcntType::Mesh,
+            watcher_to_writer_icnt: super::IcntType::Mesh,
+            num_writer_entry: 1,
+            num_writer_merge: 1,
+            single_watcher: false,
+            private_cache_size: 1,
+            l3_cache_size: 1,
+            channel_size: 16,
+            l3_cache_type: super::CacheType::Simple,
+            ramu_cache_config: ramulator_wrapper::PresetConfigs::HBM,
+            private_cache_config: crate::satacc::CacheConfig {
+                sets: 16,
+                associativity: 4,
+                block_size: 64,
+                channels: 1,
+            },
+            l3_cache_config: crate::satacc::CacheConfig {
+                sets: 16,
+                associativity: 4,
+                block_size: 64,
+                channels: 1,
+            },
+            hit_latency: 5,
+            miss_latency: 120,
+        };
+        let config_file = "satacc_config.toml";
+        let content = toml::to_string_pretty(&config).unwrap();
+        fs::write(config_file, content).unwrap();
     }
 }

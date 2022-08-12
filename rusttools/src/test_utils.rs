@@ -4,3 +4,4 @@ pub fn init() {
         .is_test(true)
         .try_init();
 }
+

@@ -32,32 +32,32 @@ impl SingleRoundTask {
 #[derive(Debug, Default)]
 pub struct WatcherTask {
     /// the watcher list meta data addr
-    meta_data_addr: u64,
+    pub(crate) meta_data_addr: u64,
     /// the watcher list value
-    watcher_addr: u64,
+    pub(crate) watcher_addr: u64,
     /// the assign literal
-    watcher_id: usize,
+    pub(crate) watcher_id: usize,
     /// the time to process the watcher list
     /// the watchers to be processed
-    single_watcher_tasks: VecDeque<ClauseTask>,
+    pub(crate) single_watcher_tasks: VecDeque<ClauseTask>,
 }
 
 #[derive(Debug)]
-struct ClauseData {
-    clause_id: usize,
-    clause_addr: u64,
-    clause_processing_time: usize,
-    clause_value_addr: Vec<u64>,
-    clause_value_id: Vec<usize>,
+pub struct ClauseData {
+    pub clause_id: usize,
+    pub clause_addr: u64,
+    pub clause_processing_time: usize,
+    pub clause_value_addr: Vec<u64>,
+    pub clause_value_id: Vec<usize>,
 }
 
 /// # ClauseTask
 /// the single watcher that related to a clause
 #[derive(Debug)]
 pub struct ClauseTask {
-    watcher_id: usize,
-    blocker_addr: u64,
-    clause_data: Option<ClauseData>,
+    pub watcher_id: usize,
+    pub blocker_addr: u64,
+    pub clause_data: Option<ClauseData>,
 }
 impl ClauseTask {
     pub fn into_push_clause_req(self, total_watchers: usize) -> IcntMsgWrapper<Self> {
@@ -78,6 +78,9 @@ impl ClauseTask {
             req_type: MemReqType::WatcherReadBlocker,
         }
     }
+    pub fn have_to_read_clause(&self) -> bool {
+        self.clause_data.is_some()
+    }
     pub fn get_clause_data_task(
         &self,
         context: &mut SataccStatus,
@@ -85,19 +88,23 @@ impl ClauseTask {
         clause_pe_id: usize,
         total_watchers: usize,
     ) -> IcntMsgWrapper<MemReq> {
-        let clause_data = self.clause_data.as_ref().unwrap();
-        let mem_id = ((clause_data.clause_addr >> 6) & ((1 << 3) - 1)) as usize;
-        let req = MemReq {
-            addr: clause_data.clause_addr,
-            id: context.next_mem_id(),
-            watcher_pe_id: watcher_pe_id,
-            mem_id,
-            is_write: false,
-            req_type: MemReqType::ClauseReadData(clause_pe_id),
-        };
-        IcntMsgWrapper {
-            msg: req,
-            mem_target_port: total_watchers + mem_id,
+        match &self.clause_data {
+            Some(clause_data) => {
+                let mem_id = ((clause_data.clause_addr >> 6) & ((1 << 3) - 1)) as usize;
+                let req = MemReq {
+                    addr: clause_data.clause_addr,
+                    id: context.next_mem_id(),
+                    watcher_pe_id: watcher_pe_id,
+                    mem_id,
+                    is_write: false,
+                    req_type: MemReqType::ClauseReadData(clause_pe_id),
+                };
+                IcntMsgWrapper {
+                    msg: req,
+                    mem_target_port: total_watchers + mem_id,
+                }
+            }
+            None => panic!("clause data is none"),
         }
     }
     pub fn get_read_clause_value_task(
@@ -130,6 +137,7 @@ impl ClauseTask {
     pub fn get_watcher_pe_id(&self, total_watchers: usize) -> usize {
         self.watcher_id / 2 % total_watchers
     }
+    /// the process time to process the whole clause
     pub fn get_process_time(&self) -> usize {
         self.clause_data.as_ref().unwrap().clause_processing_time
     }
@@ -145,6 +153,7 @@ impl SataccMinisatTask {
     }
 
     #[no_mangle]
+    /// this will create a simulator task object, do not free it, it will be freed by calling `run_full_expr`
     pub extern "C" fn create_empty_task() -> *mut Self {
         Box::into_raw(Box::new(Self::new()))
     }

@@ -43,7 +43,6 @@ impl WatcherInterface {
         cache_config: &CacheConfig,
         hit_latency: usize,
         miss_latency: usize,
-        num_watchers: usize,
         num_clauses_per_watcher: usize,
         watcher_pe_id: usize,
         total_watchers: usize,
@@ -73,7 +72,7 @@ impl WatcherInterface {
             watcher_icnt_interface,
             private_cache_in.0.clone(),
             watcher_private_cache_in.1,
-            num_watchers,
+            total_watchers,
             watcher_pe_id,
         );
         let (clause_task_senders, clause_mem_senders, clauses) = (0..num_clauses_per_watcher)
@@ -227,65 +226,203 @@ impl SimComponent for WatcherInterface {
 #[cfg(test)]
 mod test {
 
-    // use super::*;
+    use std::collections::VecDeque;
+
+    use crate::{
+        satacc::{
+            satacc_minisat_task::{ClauseData, ClauseTask, WatcherTask},
+            watcher_interface::WatcherInterface,
+            CacheConfig, SataccStatus,
+        },
+        sim::{ChannelBuilder, SimRunner},
+        test_utils,
+    };
 
     #[test]
     fn test_watcher_interface() {
-        // test_utils::init();
-        // let channel_builder = ChannelBuilder::new();
-        // let (icnt_port_base, icnt_port_in) = channel_builder.in_out_port(10);
-        // let (task_port_base, task_port_in) = channel_builder.in_out_port(10);
-        // let (watcher_task_sender, watcher_task_receiver) = channel_builder.sim_channel(10);
-        // let watcher_interface = WatcherInterface::new(
-        //     icnt_port_in,
-        //     task_port_in,
-        //     watcher_task_receiver,
-        //     4,
-        //     &channel_builder,
-        //     10,
-        //     &CacheConfig {
-        //         sets: 2,
-        //         associativity: 2,
-        //         block_size: 4,
-        //         channels: 1,
-        //     },
-        //     10,
-        //     120,
-        //     1,
-        //     1,
-        //     1,
-        //     1,
-        //     1,
-        // );
+        test_utils::init();
 
-        // let mut shared_status = SataccStatus::new();
-        // let icnt_msg = IcntMsgWrapper {
-        //     msg: MemReq {
-        //         addr: 0,
-        //         id: shared_status.next_mem_id(),
-        //         req_type: MemReqType::Watcher(WatcherTask {}, WatcherAccessType::ReadData),
-        //         is_write: false,
-        //         watcher_id: 0,
-        //         mem_id: shared_status.next_mem_id(),
-        //     },
-        //     target_port: 0,
-        //     mem_target_port: todo!(),
-        // };
-        // icnt_port_base.out_port.send(icnt_msg).unwrap();
-        // let icnt_msg = IcntMsgWrapper {
-        //     msg: ClauseTask {
-        //         task_id: ClauseTaskId {
-        //             clause_id: 3,
-        //             watcher_id: 0,
-        //         },
-        //     },
-        //     target_port: 0,
-        // };
-        // task_port_base.out_port.send(icnt_msg).unwrap();
+        let channel_builder = ChannelBuilder::new();
+        let (icnt_port_base, icnt_port_in) = channel_builder.in_out_port(10);
+        let (_task_port_base, task_port_in) = channel_builder.in_out_port(10);
+        let (watcher_task_sender, watcher_task_receiver) = channel_builder.sim_channel(10);
+        let watcher_interface = WatcherInterface::new(
+            icnt_port_in,
+            task_port_in,
+            watcher_task_receiver,
+            &channel_builder,
+            10,
+            &CacheConfig {
+                sets: 2,
+                associativity: 2,
+                block_size: 4,
+                channels: 1,
+            },
+            10,
+            120,
+            2,
+            0,
+            1,
+        );
 
-        // let mut sim_runner = SimRunner::new(watcher_interface, shared_status);
-        // sim_runner.run();
+        let shared_status = SataccStatus::new();
+        let mut sim_runner = SimRunner::new(watcher_interface, shared_status);
+        // send the task to watcher interface, and it will be send to watcher, the wather will send a mem req for watcher meta data
+        watcher_task_sender
+            .send(WatcherTask {
+                meta_data_addr: 0,
+                watcher_addr: 0,
+                watcher_id: 0,
+                single_watcher_tasks: VecDeque::new(),
+            })
+            .unwrap();
+        sim_runner.run();
+        let req = icnt_port_base.in_port.recv().unwrap();
+        log::debug!("{:?}", req);
+        // send it back
+        icnt_port_base.out_port.send(req).unwrap();
+        sim_runner.run();
+        // the watcher will send a mem req for watcher data
+        let req = icnt_port_base.in_port.recv().unwrap();
+        log::debug!("{:?}", req);
+        // send it back
+        icnt_port_base.out_port.send(req).unwrap();
+        sim_runner.run();
+        // because there are no clause in this watcher task, so no blocker request will be sent!
+        assert!(icnt_port_base.in_port.recv().is_err());
+    }
 
-        // log::debug!("{:?}", sim_runner.get_current_cycle());
+    #[test]
+    fn test_watcher_interface_watcher_with_clause() {
+        test_utils::init();
+        let channel_builder = ChannelBuilder::new();
+        let (icnt_port_base, icnt_port_in) = channel_builder.in_out_port(10);
+        let (_task_port_base, task_port_in) = channel_builder.in_out_port(10);
+        let (watcher_task_sender, watcher_task_receiver) = channel_builder.sim_channel(10);
+        let watcher_interface = WatcherInterface::new(
+            icnt_port_in,
+            task_port_in,
+            watcher_task_receiver,
+            &channel_builder,
+            10,
+            &CacheConfig {
+                sets: 2,
+                associativity: 2,
+                block_size: 4,
+                channels: 1,
+            },
+            10,
+            120,
+            2,
+            0,
+            1,
+        );
+
+        let shared_status = SataccStatus::new();
+        let mut sim_runner = SimRunner::new(watcher_interface, shared_status);
+        // send the task to watcher interface, and it will be send to watcher, the wather will send a mem req for watcher meta data
+        let clause_task = ClauseTask {
+            watcher_id: 0,
+            blocker_addr: 0,
+            clause_data: None,
+        };
+        watcher_task_sender
+            .send(WatcherTask {
+                meta_data_addr: 0,
+                watcher_addr: 0,
+                watcher_id: 0,
+                single_watcher_tasks: [clause_task].into(),
+            })
+            .unwrap();
+        sim_runner.run();
+        let req = icnt_port_base.in_port.recv().unwrap();
+        log::debug!("{:?}", req);
+        // send it back
+        icnt_port_base.out_port.send(req).unwrap();
+        sim_runner.run();
+        // the watcher will send a mem req for watcher data
+        let req = icnt_port_base.in_port.recv().unwrap();
+        log::debug!("{:?}", req);
+        // send it back
+        icnt_port_base.out_port.send(req).unwrap();
+        sim_runner.run();
+        // because there are one clause task, so it will read the private cache,
+        //but it will not send the clause task to other interface, because the clause is not required to read clause data
+    }
+
+    #[test]
+    fn test_watcher_interface_watcher_with_clause_read_clause_datas() {
+        test_utils::init();
+        let channel_builder = ChannelBuilder::new();
+        let (icnt_port_base, icnt_port_in) = channel_builder.in_out_port(10);
+        let (task_port_base, task_port_in) = channel_builder.in_out_port(10);
+        let (watcher_task_sender, watcher_task_receiver) = channel_builder.sim_channel(10);
+        let watcher_interface = WatcherInterface::new(
+            icnt_port_in,
+            task_port_in,
+            watcher_task_receiver,
+            &channel_builder,
+            10,
+            &CacheConfig {
+                sets: 2,
+                associativity: 2,
+                block_size: 4,
+                channels: 1,
+            },
+            10,
+            120,
+            2,
+            0,
+            1,
+        );
+
+        let shared_status = SataccStatus::new();
+        let mut sim_runner = SimRunner::new(watcher_interface, shared_status);
+        // send the task to watcher interface, and it will be send to watcher, the wather will send a mem req for watcher meta data
+        let clause_task = ClauseTask {
+            watcher_id: 0,
+            blocker_addr: 0,
+            clause_data: Some(ClauseData {
+                clause_id: 1,
+                clause_addr: 100,
+                clause_processing_time: 100,
+                clause_value_addr: vec![200, 300, 400],
+                clause_value_id: vec![2, 3, 4],
+            }),
+        };
+        watcher_task_sender
+            .send(WatcherTask {
+                meta_data_addr: 0,
+                watcher_addr: 0,
+                watcher_id: 0,
+                single_watcher_tasks: [clause_task].into(),
+            })
+            .unwrap();
+        sim_runner.run();
+        let req = icnt_port_base.in_port.recv().unwrap();
+        log::debug!("{:?}", req);
+        // send it back
+        icnt_port_base.out_port.send(req).unwrap();
+        sim_runner.run();
+        // the watcher will send a mem req for watcher data
+        let req = icnt_port_base.in_port.recv().unwrap();
+        log::debug!("{:?}", req);
+        // send it back
+        icnt_port_base.out_port.send(req).unwrap();
+        sim_runner.run();
+        // because there are one clause task, so it will read the private cache,
+        // and it will send the request to the clause unit.
+        let req = task_port_base.in_port.recv().unwrap();
+        log::debug!("{:?}", req);
+        // send it back
+        task_port_base.out_port.send(req).unwrap();
+        sim_runner.run();
+        // now the clause unit will receive the task, and it will read the clause
+        let req = icnt_port_base.in_port.recv().unwrap();
+        log::debug!("{:?}", req);
+        // send it back
+        icnt_port_base.out_port.send(req).unwrap();
+        sim_runner.run();
+        // not the clause unit will finished read clause, then access the private cache for value, then finish the task! done!
     }
 }

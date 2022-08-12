@@ -143,7 +143,7 @@ impl SimComponent for ClauseUnit {
         }
         // process private cache ret
         if let Ok(mem_req) = self.private_cache_port.in_port.recv() {
-            log::debug!("ClauseUnit Receive mem_req! {current_cycle}");
+            log::debug!("ClauseUnit Receive mem_req from private cache! {current_cycle}");
             match mem_req.msg.req_type {
                 MemReqType::ClauseReadValue(_clause_id) => {
                     let current_waiting = self.current_reading_value_task.as_mut().unwrap();
@@ -159,5 +159,68 @@ impl SimComponent for ClauseUnit {
             busy = true;
         }
         busy
+    }
+}
+#[cfg(test)]
+mod test {
+    use crate::{
+        satacc::{
+            icnt::IcntMsgWrapper,
+            satacc_minisat_task::{ClauseData, ClauseTask},
+            SataccStatus,
+        },
+        sim::{ChannelBuilder, SimRunner},
+        test_utils,
+    };
+
+    use super::ClauseUnit;
+
+    #[test]
+    fn test_clause_unit() {
+        test_utils::init();
+        let channel_builder = ChannelBuilder::new();
+        let clause_task_port = channel_builder.sim_channel(10);
+        let clause_task_in = clause_task_port.1;
+        let mem_icnt_port_pair = channel_builder.in_out_port(10);
+        let mem_icnt_port = mem_icnt_port_pair.0;
+        let private_cache_port_pair = channel_builder.in_out_port(10);
+        let private_cache_port = private_cache_port_pair.0;
+        let cluase_unit =
+            ClauseUnit::new(clause_task_in, mem_icnt_port, private_cache_port, 0, 1, 0);
+        let context = SataccStatus::new();
+        let mut sim_runner = SimRunner::new(cluase_unit, context);
+        clause_task_port
+            .0
+            .send(IcntMsgWrapper {
+                msg: ClauseTask {
+                    watcher_id: 1,
+                    blocker_addr: 0,
+                    clause_data: Some(ClauseData {
+                        clause_id: 0,
+                        clause_addr: 0,
+                        clause_processing_time: 1,
+                        clause_value_addr: vec![1, 2, 3],
+                        clause_value_id: vec![1, 2, 3],
+                    }),
+                },
+                mem_target_port: 0,
+            })
+            .unwrap();
+        sim_runner.run();
+        let req = mem_icnt_port_pair.1.in_port.recv().unwrap();
+        log::debug!("should be read data: {:?}", req);
+        mem_icnt_port_pair.1.out_port.send(req).unwrap();
+        sim_runner.run();
+        // now private cache should receive 3 requests
+        let req1 = private_cache_port_pair.1.in_port.recv().unwrap();
+        let req2 = private_cache_port_pair.1.in_port.recv().unwrap();
+        let req3 = private_cache_port_pair.1.in_port.recv().unwrap();
+        log::debug!("should be read value: {:?} {:?} {:?}", req1, req2, req3);
+        private_cache_port_pair.1.out_port.send(req1).unwrap();
+        private_cache_port_pair.1.out_port.send(req2).unwrap();
+        private_cache_port_pair.1.out_port.send(req3).unwrap();
+
+        sim_runner.run();
+        // now clause unit should receive 3 requests and finished the process
     }
 }

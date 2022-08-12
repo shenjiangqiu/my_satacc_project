@@ -103,6 +103,7 @@ impl SimComponent for Watcher {
         }
         // then check the tasks that finished the watcher list read
         if let Some(watcher_task) = self.data_finished_queue.pop_front() {
+            busy = true;
             // start to read the watcher data!
             let signale_watcher_tasks = watcher_task.into_sub_single_watcher_task();
             self.single_watcher_task_queue.extend(signale_watcher_tasks);
@@ -128,6 +129,7 @@ impl SimComponent for Watcher {
 
         // update current processing task
         if let Some((finished_cycle, single_task)) = self.current_processing_task.take() {
+            busy = true;
             if finished_cycle > current_cycle {
                 self.current_processing_task = Some((finished_cycle, single_task));
             } else {
@@ -139,29 +141,35 @@ impl SimComponent for Watcher {
         // process the watcher
         if self.current_processing_task.is_none() {
             if let Some(single_task) = self.single_watcher_value_finished_queue.pop_front() {
-                let process_time = single_task.get_process_time();
+                busy = true;
+                // a watcher need 2 cycle to test if it's time to read the clause
+                let process_time = 2;
                 self.current_processing_task = Some((current_cycle + process_time, single_task));
             }
         }
 
         // then send the task to clause unit
         if let Some(single_task) = self.single_watcher_process_finished_queue.pop_front() {
-            match self
-                .clause_icnt_sender
-                .send(single_task.into_push_clause_req(self.total_watchers))
-            {
-                Ok(_) => busy = true,
-                Err(clause_task) => {
-                    // cannot send to cache now
-                    let clause_task = clause_task.msg;
-                    self.single_watcher_process_finished_queue
-                        .push_front(clause_task);
+            // only send to the clause unit when it has to.
+            if single_task.have_to_read_clause() {
+                match self
+                    .clause_icnt_sender
+                    .send(single_task.into_push_clause_req(self.total_watchers))
+                {
+                    Ok(_) => busy = true,
+                    Err(clause_task) => {
+                        // cannot send to cache now
+                        let clause_task = clause_task.msg;
+                        self.single_watcher_process_finished_queue
+                            .push_front(clause_task);
+                    }
                 }
             }
         }
 
         // get the global memory return
         if let Ok(mem_req) = self.cache_mem_icnt_sender.in_port.recv() {
+            busy = true;
             log::debug!("Watcher Receive mem_req! {current_cycle}");
             match mem_req.msg.req_type {
                 MemReqType::WatcherReadMetaData => {
@@ -185,6 +193,7 @@ impl SimComponent for Watcher {
         // get the private cache return
         if let Ok(mem_req) = self.private_cache_receiver.recv() {
             log::debug!("Watcher Receive mem_req! {current_cycle}");
+            busy = true;
             match mem_req.msg.req_type {
                 MemReqType::WatcherReadBlocker => {
                     self.single_watcher_value_finished_queue.push_back(

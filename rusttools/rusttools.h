@@ -64,6 +64,8 @@ enum class WatcherToClauseType {
 /// - it contains many decisions in [`SingleRoundTask`]
 struct SataccMinisatTask;
 
+struct SimulatorWapper;
+
 struct CacheConfig {
   uint64_t sets;
   uint64_t associativity;
@@ -93,12 +95,12 @@ struct Config {
   size_t private_cache_size;
   size_t l3_cache_size;
   size_t channel_size;
-  CacheType cache_type;
+  CacheType l3_cache_type;
   PresetConfigs ramu_cache_config;
-  CacheConfig private_cache_config;
-  CacheConfig l3_cache_config;
   size_t hit_latency;
   size_t miss_latency;
+  CacheConfig private_cache_config;
+  CacheConfig l3_cache_config;
 };
 
 struct Point {
@@ -136,13 +138,25 @@ void add_watcher_task(SataccMinisatTask *self,
 
 Config config_from_file(const char *path);
 
+/// this will create a simulator task object, do not free it, it will be freed by calling `run_full_expr`
 SataccMinisatTask *create_empty_task();
+
+/// finish the simulation, this will consume the simulator
+void finish_simulator(SataccMinisatTask *task, SimulatorWapper *sim);
+
+/// get the simulator
+SimulatorWapper *get_simulator();
 
 int32_t get_x(const Point *self);
 
 int32_t get_y(const Point *self);
 
-void run(SataccMinisatTask *task);
+/// run full simulation and will delete the task, do not use the task anymore!
+void run_full_expr(SataccMinisatTask *task);
+
+/// run a single round of simulation,
+/// this will not consume any point, you can use it later
+void run_single_task(SataccMinisatTask *task, SimulatorWapper *sim);
 
 void say_hello(const Point *point, const Rec *rect);
 

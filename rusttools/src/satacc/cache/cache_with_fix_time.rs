@@ -93,7 +93,7 @@ impl SimComponent for CacheWithFixTime {
         }
         // then push ready queue to out
 
-        if let Some(req) = self.ready_reqs.pop_front() {
+        while let Some(req) = self.ready_reqs.pop_front() {
             log::debug!("send req: {:?} at cycle: {current_cycle}", req);
             let out_id = req.mem_id;
             let wathcer_id = req.watcher_pe_id;
@@ -108,6 +108,7 @@ impl SimComponent for CacheWithFixTime {
                 Err(e) => {
                     // cannot send to cache now
                     self.ready_reqs.push_front(e.msg);
+                    break;
                 }
             }
         }
@@ -129,7 +130,7 @@ mod test {
     fn test() {
         test_utils::init();
         let channel_builder = ChannelBuilder::new();
-        let (inout_base, inout_cache) = channel_builder.in_out_poat_array(2, 2);
+        let (inout_base, inout_cache) = channel_builder.in_out_poat_array(1000, 2);
         let cache = CacheWithFixTime {
             fast_cache: FastCache::new(&CacheConfig {
                 sets: 2,
@@ -146,12 +147,12 @@ mod test {
             req_ports: inout_cache,
         };
         let mut status = SataccStatus::new();
-        for i in 0..1000 {
+        for i in 0..10 {
             inout_base[0]
                 .out_port
                 .send(IcntMsgWrapper {
                     msg: MemReq {
-                        addr: 0x1000 + i * 9933,
+                        addr: i,
                         is_write: false,
                         mem_id: 0,
                         id: status.next_mem_id(),
