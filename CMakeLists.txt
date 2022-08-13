@@ -1,6 +1,8 @@
 cmake_minimum_required(VERSION 3.19)
 
 project(my_satacc_project)
+
+set(CMAKE_INTERPROCEDURAL_OPTIMIZATION TRUE)
 find_package(Catch2 REQUIRED)
 
 find_package(fmt REQUIRED)
