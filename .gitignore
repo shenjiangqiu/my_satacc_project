@@ -5,3 +5,7 @@ debug
 cmake-build*
 build*
 .xmake
+rusttools/cycle.json
+rusttools/stat.json
+rusttools/STAT.txt
+rusttools/statistics.json

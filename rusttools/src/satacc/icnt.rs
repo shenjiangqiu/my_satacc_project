@@ -8,13 +8,19 @@ pub trait IcntMessage {
 pub struct SimpleIcnt<T> {
     pub ports: Vec<InOutPort<T>>,
     in_transit_messages: WaitingTask<T>,
+    row_size: usize,
 }
 
 impl<T> SimpleIcnt<T> {
     pub fn new(ports: Vec<InOutPort<T>>) -> Self {
+        let num_ports = ports.len();
+        let ports_sqrt = (num_ports as f64).sqrt().floor() as usize;
+        let ports_sqrt = if ports_sqrt == 0 { 1 } else { ports_sqrt };
+
         SimpleIcnt {
             ports,
             in_transit_messages: WaitingTask::new(),
+            row_size: ports_sqrt,
         }
     }
     pub fn new_with_config(
@@ -79,7 +85,11 @@ where
         {
             if let Ok(message) = in_port.recv() {
                 let output_port = message.get_target_port();
-                let cycle_to_go = output_port.abs_diff(input_port);
+                let input_row = input_port / self.row_size;
+                let input_col = input_port % self.row_size;
+                let output_row = output_port / self.row_size;
+                let output_col = output_port % self.row_size;
+                let cycle_to_go = input_row.abs_diff(output_row) + input_col.abs_diff(output_col);
                 self.in_transit_messages
                     .push(message, current_cycle + cycle_to_go);
                 busy = true;

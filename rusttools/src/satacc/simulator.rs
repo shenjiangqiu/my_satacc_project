@@ -175,7 +175,7 @@ impl Simulator {
                     &channel_builder,
                     self.config.channel_size,
                     &self.config.private_cache_config,
-                    self.config.hit_latency,
+                    self.config.l1_hit_latency,
                     self.config.miss_latency,
                     self.config.n_clauses,
                     watcher_pe_id,
@@ -195,7 +195,7 @@ impl Simulator {
                             .skip(self.config.n_watchers)
                             .cloned()
                             .collect(),
-                        self.config.hit_latency,
+                        self.config.l3_hit_latency,
                         self.config.miss_latency,
                         CacheId::L3Cache,
                     );
@@ -211,7 +211,7 @@ impl Simulator {
                             .cloned()
                             .collect(),
                         self.config.ramu_cache_config,
-                        self.config.hit_latency,
+                        self.config.l3_hit_latency,
                         CacheId::L3Cache,
                     );
 
@@ -280,7 +280,8 @@ mod test {
                 block_size: 64,
                 channels: 8,
             },
-            hit_latency: 10,
+            l1_hit_latency: 1,
+            l3_hit_latency: 15,
             miss_latency: 120,
         };
         let simulator = Simulator::new_from_config(config.clone());

@@ -7,6 +7,9 @@ use crate::{
 
 use super::{AccessResult, CacheConfig, CacheId, FastCache};
 
+/// the cache with fix time simulator
+/// the hit latency is fixed
+/// when miss, the latency will be `miss_latency`
 pub struct CacheWithFixTime {
     pub fast_cache: FastCache,
     pub req_ports: Vec<InOutPort<IcntMsgWrapper<MemReq>>>,
@@ -42,7 +45,7 @@ impl SimComponent for CacheWithFixTime {
     type SharedStatus = SataccStatus;
     fn update(&mut self, shared_status: &mut Self::SharedStatus, current_cycle: usize) -> bool {
         let mut busy = !self.on_going_reqs.is_empty();
-        // first check if there is any request in the in_req_queues
+        // first check if there is any request in the in_req_queues, if find, access it
         for InOutPort {
             in_port,
             out_port: _,
@@ -55,12 +58,16 @@ impl SimComponent for CacheWithFixTime {
             {
                 match self.fast_cache.access(msg.addr) {
                     AccessResult::Hit(tag) => {
+                        // if it's hit, if the tag is in the tag_to_reqs, means it's already in on_going_reqs, just add this req to tag_to_reqs
+                        // if the tag is not in the tag_to_reqs, means it's not in on_going_reqs, add it to on_going_reqs and tag_to_reqs
                         shared_status.statistics.update_hit(&self.cache_id);
                         match self.tag_to_reqs.get_mut(&tag) {
                             Some(entry) => {
                                 entry.push(msg);
                             }
                             None => {
+                                // no tag in record, add it!
+                                // the latency will be hit_latency
                                 self.on_going_reqs
                                     .push(tag, current_cycle + self.hit_latency);
                                 self.tag_to_reqs.insert(tag, vec![msg]);

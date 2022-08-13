@@ -9,13 +9,20 @@ use crate::{
 
 use super::{get_set_number_from_addr, AccessResult, CacheConfig, CacheId, FastCache};
 
+/// # CacheWithRamulator
+/// the cache with ramulator simulator
+/// - when miss, it will send a request to the ramulator
+/// - when the ramulator returns the result, it will resonse the request to sender with a `lit_latency`
 pub struct CacheWithRamulator {
     pub fast_cache: FastCache,
     pub ramulator: RamulatorWrapper,
     pub req_ports: Vec<InOutPort<IcntMsgWrapper<MemReq>>>,
     pub on_going_reqs: WaitingTask<MemReq>,
+    /// the tags the hold a vec of requests that are waiting for the ramulator
     pub on_dram_reqs: BTreeMap<u64, Vec<MemReq>>,
     pub hit_latency: usize,
+    /// the mem request received from the queue, and accessed the cache, but not yet able to send to the dram.
+    /// process it!
     pub temp_send_blocked_req: Option<MemReq>,
     pub cache_id: CacheId,
 }
@@ -47,6 +54,7 @@ impl SimComponent for CacheWithRamulator {
         let mut busy = !self.on_going_reqs.is_empty() || !self.on_dram_reqs.is_empty();
         // first check if there is any request in the in_req_queues
         if let Some(req) = self.temp_send_blocked_req.take() {
+            // if temp_send_blocked_req have value, first process it!
             if self.ramulator.available(req.addr, req.is_write) {
                 log::debug!("send blocked req to dram");
                 let tag = get_set_number_from_addr(
@@ -62,6 +70,8 @@ impl SimComponent for CacheWithRamulator {
                 self.temp_send_blocked_req = Some(req);
             }
         } else {
+            // for each inport, check if there is any request in the in_req_queues,
+            // try to send it to dram, if cannot send it, put it in temp_send_blocked_req and send it next cycle
             for InOutPort {
                 in_port,
                 out_port: _,
@@ -118,6 +128,7 @@ impl SimComponent for CacheWithRamulator {
         // then check if there is any request in the on_going_reqs
         while let Some((leaving_cycle, req)) = self.on_going_reqs.pop() {
             if leaving_cycle > current_cycle {
+                // cannot send it now
                 self.on_going_reqs.push(req, leaving_cycle);
                 break;
             } else {
