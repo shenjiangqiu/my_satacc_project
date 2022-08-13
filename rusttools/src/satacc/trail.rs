@@ -26,7 +26,7 @@ impl Trail {
 
 impl SimComponent for Trail {
     type SharedStatus = super::SataccStatus;
-    fn update(&mut self, _shared_status: &mut Self::SharedStatus, _current_cycle: usize) -> bool {
+    fn update(&mut self, shared_status: &mut Self::SharedStatus, _current_cycle: usize) -> bool {
         let mut busy = self.current_working_task.is_some();
         // update current running task
         if let Some(current_task) = self.current_working_task.as_mut() {
@@ -48,6 +48,8 @@ impl SimComponent for Trail {
         // get new task
         if self.current_working_task.is_none() {
             if let Ok(single_round_task) = self.task_receiver.recv() {
+                // a new round begin, update the statistics
+                shared_status.update_single_round_task(&single_round_task);
                 self.current_working_task = Some(single_round_task);
                 busy = true;
             }

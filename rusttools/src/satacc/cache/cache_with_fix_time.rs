@@ -5,7 +5,7 @@ use crate::{
     sim::{InOutPort, SimComponent},
 };
 
-use super::{AccessResult, CacheConfig, FastCache};
+use super::{AccessResult, CacheConfig, CacheId, FastCache};
 
 pub struct CacheWithFixTime {
     pub fast_cache: FastCache,
@@ -15,6 +15,7 @@ pub struct CacheWithFixTime {
     pub hit_latency: usize,
     pub miss_latency: usize,
     pub ready_reqs: VecDeque<MemReq>,
+    pub cache_id: CacheId,
 }
 impl CacheWithFixTime {
     pub fn new(
@@ -22,6 +23,7 @@ impl CacheWithFixTime {
         req_ports: Vec<InOutPort<IcntMsgWrapper<MemReq>>>,
         hit_latency: usize,
         miss_latency: usize,
+        cache_id: CacheId,
     ) -> Self {
         Self {
             fast_cache: FastCache::new(config),
@@ -31,6 +33,7 @@ impl CacheWithFixTime {
             hit_latency,
             miss_latency,
             ready_reqs: VecDeque::new(),
+            cache_id,
         }
     }
 }
@@ -52,7 +55,7 @@ impl SimComponent for CacheWithFixTime {
             {
                 match self.fast_cache.access(msg.addr) {
                     AccessResult::Hit(tag) => {
-                        shared_status.cache_status.hits += 1;
+                        shared_status.statistics.update_hit(&self.cache_id);
                         match self.tag_to_reqs.get_mut(&tag) {
                             Some(entry) => {
                                 entry.push(msg);
@@ -65,7 +68,7 @@ impl SimComponent for CacheWithFixTime {
                         }
                     }
                     AccessResult::Miss(tag) => {
-                        shared_status.cache_status.misses += 1;
+                        shared_status.statistics.update_miss(&self.cache_id);
                         match self.tag_to_reqs.get_mut(&tag) {
                             Some(entry) => {
                                 entry.push(msg);
@@ -120,6 +123,7 @@ impl SimComponent for CacheWithFixTime {
 #[cfg(test)]
 mod test {
     use crate::{
+        config::Config,
         satacc::{cache::fast_cache::CacheConfig, MemReqType},
         sim::{ChannelBuilder, SimRunner},
         test_utils,
@@ -145,8 +149,10 @@ mod test {
             tag_to_reqs: BTreeMap::new(),
             ready_reqs: VecDeque::new(),
             req_ports: inout_cache,
+            cache_id: CacheId::L3Cache,
         };
-        let mut status = SataccStatus::new();
+        let config = Config::default();
+        let mut status = SataccStatus::new(config);
         for i in 0..10 {
             inout_base[0]
                 .out_port

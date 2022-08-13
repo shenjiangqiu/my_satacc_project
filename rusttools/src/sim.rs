@@ -92,6 +92,9 @@ where
     pub fn get_current_cycle(&self) -> usize {
         self.current_cycle
     }
+    pub fn into_inner(self) -> (T, S, usize) {
+        (self.sim, self.shared_status, self.current_cycle)
+    }
 }
 #[derive(Debug)]
 pub struct SimSender<T> {

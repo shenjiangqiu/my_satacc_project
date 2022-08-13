@@ -1,23 +1,22 @@
-use std::collections::{BTreeMap, VecDeque};
+use std::fs::File;
 
 use env_logger::Env;
-use ramulator_wrapper::RamulatorWrapper;
 
 use crate::{
     config::Config,
     satacc::{
-        cache::{CacheWithFixTime, CacheWithRamulator, FastCache},
+        cache::{CacheWithFixTime, CacheWithRamulator},
         icnt::IcntMsgWrapper,
         satacc_minisat_task::ClauseTask,
         watcher_interface::WatcherInterface,
-        wating_task::WaitingTask,
         MemReq, SataccStatus,
     },
     sim::{AndSim, ChannelBuilder, Connectable, SimComponent, SimRunner, SimSender},
 };
 
 use super::{
-    icnt::SimpleIcnt, satacc_minisat_task::SingleRoundTask, trail::Trail, SataccMinisatTask,
+    cache::CacheId, icnt::SimpleIcnt, satacc_minisat_task::SingleRoundTask, trail::Trail,
+    SataccMinisatTask,
 };
 
 pub struct Simulator {
@@ -53,9 +52,12 @@ impl Simulator {
             .unwrap_or_else(|_e| {
                 log::error!("fail to set logger!");
             });
-        let simulator = Self::new("satacc_config.toml");
+        let config = Config::from_config_file("satacc_config.toml").unwrap();
+
+        let simulator = Self::new_from_config(config.clone());
+
         let (task_sender, comp) = simulator.build();
-        let shared_status = SataccStatus::new();
+        let shared_status = SataccStatus::new(config);
         let sim_runner = SimRunner::new(comp, shared_status);
         let wapper = SimulatorWapper {
             total_rounds: 0,
@@ -88,12 +90,15 @@ impl Simulator {
     #[no_mangle]
     pub extern "C" fn finish_simulator(task: *mut SataccMinisatTask, sim: *mut SimulatorWapper) {
         unsafe {
-            let sim = Box::from_raw(sim);
+            let sim: SimulatorWapper = *Box::from_raw(sim);
             log::info!(
                 "finish simulator cycle:{}",
                 sim.sim_runner.get_current_cycle()
             );
-
+            let (_, mut status, cycle) = sim.sim_runner.into_inner();
+            status.statistics.total_cycle = cycle;
+            status.save_statistics("statistics.json");
+            serde_json::to_writer_pretty(File::create("cycle.json").unwrap(), &cycle).unwrap();
             // release the task builder
             let _task = Box::from_raw(task);
         }
@@ -106,9 +111,10 @@ impl Simulator {
             .try_init()
             .unwrap_or_default();
         let mut task = unsafe { Box::from_raw(task) };
-        let simulator = Self::new("satacc_config.toml");
+        let config = Config::from_config_file("satacc_config.toml").unwrap();
+        let simulator = Self::new_from_config(config.clone());
         let (task_sender, comp) = simulator.build();
-        let shared_status = SataccStatus::new();
+        let shared_status = SataccStatus::new(config);
         let mut sim_runner = SimRunner::new(comp, shared_status);
         while let Some(single_round_task) = task.pop_next_task() {
             task_sender.send(single_round_task).unwrap_or_else(|_e| {
@@ -120,6 +126,10 @@ impl Simulator {
             "simulator finished! total cycles: {}",
             sim_runner.get_current_cycle(),
         );
+        let (_, mut status, cycle) = sim_runner.into_inner();
+        status.statistics.total_cycle = cycle;
+        status.save_statistics("statistics.json");
+        serde_json::to_writer_pretty(File::create("cycle.json").unwrap(), &cycle).unwrap();
     }
     pub fn build(&self) -> (SimSender<SingleRoundTask>, MySataccCompType) {
         let channel_builder = ChannelBuilder::new();
@@ -178,38 +188,33 @@ impl Simulator {
         let shared_l3_cache: Box<dyn SimComponent<SharedStatus = SataccStatus>> =
             match self.config.l3_cache_type {
                 crate::config::CacheType::Simple => {
-                    let cache = CacheWithFixTime {
-                        fast_cache: FastCache::new(&self.config.l3_cache_config),
-                        req_ports: cache_base_ports
+                    let cache = CacheWithFixTime::new(
+                        &self.config.l3_cache_config,
+                        cache_base_ports
                             .iter()
                             .skip(self.config.n_watchers)
                             .cloned()
                             .collect(),
-                        on_going_reqs: WaitingTask::new(),
-                        hit_latency: self.config.hit_latency,
-                        miss_latency: self.config.miss_latency,
-                        tag_to_reqs: BTreeMap::new(),
-                        ready_reqs: VecDeque::new(),
-                    };
+                        self.config.hit_latency,
+                        self.config.miss_latency,
+                        CacheId::L3Cache,
+                    );
+
                     Box::new(cache)
                 }
                 crate::config::CacheType::Ramu => {
-                    let cache = CacheWithRamulator {
-                        fast_cache: FastCache::new(&self.config.l3_cache_config),
-                        ramulator: RamulatorWrapper::new_with_preset(
-                            self.config.ramu_cache_config,
-                            "ramulator_results.txt",
-                        ),
-                        req_ports: cache_base_ports
+                    let cache = CacheWithRamulator::new(
+                        &self.config.l3_cache_config,
+                        cache_base_ports
                             .iter()
                             .skip(self.config.n_watchers)
                             .cloned()
                             .collect(),
-                        on_going_reqs: WaitingTask::new(),
-                        on_dram_reqs: BTreeMap::new(),
-                        hit_latency: self.config.hit_latency,
-                        temp_send_blocked_req: None,
-                    };
+                        self.config.ramu_cache_config,
+                        self.config.hit_latency,
+                        CacheId::L3Cache,
+                    );
+
                     Box::new(cache)
                 }
             };
@@ -230,7 +235,7 @@ mod test {
         config::{CacheType, Config, DramType, IcntType, WatcherToClauseType},
         satacc::{
             satacc_minisat_task::{ClauseData, ClauseTask, SingleRoundTask, WatcherTask},
-            CacheConfig, SataccStatus,
+            CacheConfig, SataccMinisatTask, SataccStatus,
         },
         sim::SimRunner,
         test_utils,
@@ -278,9 +283,9 @@ mod test {
             hit_latency: 10,
             miss_latency: 120,
         };
-        let simulator = Simulator::new_from_config(config);
+        let simulator = Simulator::new_from_config(config.clone());
         let (task_sender, comp) = simulator.build();
-        let status = SataccStatus::new();
+        let status = SataccStatus::new(config);
         let mut sim_runner = SimRunner::new(comp, status);
         task_sender
             .send(SingleRoundTask {
@@ -305,5 +310,32 @@ mod test {
             })
             .unwrap_or_else(|_| {});
         sim_runner.run();
+    }
+    #[test]
+    fn test_c_interface_single_round() {
+        let simulator_wrapper = Simulator::get_simulator();
+        let task_builder = SataccMinisatTask::create_empty_task();
+        unsafe {
+            let unowned_task_builder = &mut *task_builder;
+            unowned_task_builder.start_new_assgin();
+            unowned_task_builder.add_watcher_task(0, 1, 0);
+            unowned_task_builder.add_single_watcher_task(0, 0, 0, 1, 0);
+            unowned_task_builder.add_single_watcher_clause_value_addr(0, 0);
+        }
+        Simulator::run_single_task(task_builder, simulator_wrapper);
+        Simulator::finish_simulator(task_builder, simulator_wrapper);
+    }
+
+    #[test]
+    fn test_c_interface_all() {
+        let task_builder = SataccMinisatTask::create_empty_task();
+        unsafe {
+            let unowned_task_builder = &mut *task_builder;
+            unowned_task_builder.start_new_assgin();
+            unowned_task_builder.add_watcher_task(0, 1, 0);
+            unowned_task_builder.add_single_watcher_task(0, 0, 0, 1, 0);
+            unowned_task_builder.add_single_watcher_clause_value_addr(0, 0);
+        }
+        Simulator::run_full_expr(task_builder);
     }
 }

@@ -3,7 +3,10 @@ pub struct CacheStatus {
     pub hits: usize,
     pub misses: usize,
 }
-
+pub enum CacheId {
+    L3Cache,
+    PrivateCache(usize),
+}
 /// Get the len in bits of a u32 int.
 pub(self) fn get_bit_lens(size: u64) -> u64 {
     let mut len: u64 = 0;

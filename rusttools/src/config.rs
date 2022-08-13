@@ -9,7 +9,7 @@ use crate::satacc::CacheConfig;
 
 /// The type for the watcher sending to the clase
 #[repr(C)]
-#[derive(Debug, Deserialize, Serialize)]
+#[derive(Debug, Deserialize, Serialize, Clone)]
 pub enum WatcherToClauseType {
     /// - in this case, the watcher send clause to it's own clause unit
     /// - so the clause should use icnt to send memory request
@@ -20,20 +20,20 @@ pub enum WatcherToClauseType {
 }
 /// the type of the dram that used to read and write data
 #[repr(C)]
-#[derive(Debug, Deserialize, Serialize)]
+#[derive(Debug, Deserialize, Serialize, Clone)]
 pub enum DramType {
     DDR4,
     HBM,
 }
 
 #[repr(C)]
-#[derive(Debug, Deserialize, Serialize)]
+#[derive(Debug, Deserialize, Serialize, Clone)]
 pub enum IcntType {
     Mesh,
     Ring,
     Ideal,
 }
-#[derive(Debug, Deserialize, Serialize)]
+#[derive(Debug, Deserialize, Serialize, Clone)]
 #[repr(C)]
 pub enum CacheType {
     Simple,
@@ -42,7 +42,7 @@ pub enum CacheType {
 /// the config for satacc
 ///
 #[repr(C)]
-#[derive(Debug, Deserialize, Serialize)]
+#[derive(Debug, Deserialize, Serialize, Clone)]
 pub struct Config {
     pub watcher_to_clause_type: WatcherToClauseType,
     pub n_watchers: usize,
@@ -70,7 +70,49 @@ pub struct Config {
     pub private_cache_config: CacheConfig,
     pub l3_cache_config: CacheConfig,
 }
-
+impl Default for Config {
+    /// build a default config with 16x16 pes, 1k private cache ,16M l3 cache
+    /// the cache is a fixed latency cache
+    fn default() -> Self {
+        let config = Config {
+            watcher_to_clause_type: WatcherToClauseType::Icnt,
+            n_watchers: 16,
+            n_clauses: 1,
+            mems: 8,
+            icnt: IcntType::Mesh,
+            seq: false,
+            ideal_memory: false,
+            ideal_l3cache: false,
+            multi_port: 1,
+            dram_config: DramType::HBM,
+            watcher_to_clause_icnt: IcntType::Mesh,
+            watcher_to_writer_icnt: IcntType::Mesh,
+            num_writer_entry: 1,
+            num_writer_merge: 1,
+            single_watcher: false,
+            private_cache_size: 1,
+            l3_cache_size: 1,
+            channel_size: 16,
+            l3_cache_type: CacheType::Simple,
+            ramu_cache_config: ramulator_wrapper::PresetConfigs::HBM,
+            private_cache_config: CacheConfig {
+                sets: 4,
+                associativity: 4,
+                block_size: 64,
+                channels: 1,
+            },
+            l3_cache_config: CacheConfig {
+                sets: 65536,
+                associativity: 4,
+                block_size: 64,
+                channels: 8,
+            },
+            hit_latency: 5,
+            miss_latency: 120,
+        };
+        config
+    }
+}
 impl Config {
     pub fn from_config_file(config_file: &str) -> Result<Config> {
         let config_file = fs::read_to_string(config_file).wrap_err("cannot read config file")?;

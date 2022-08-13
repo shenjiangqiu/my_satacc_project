@@ -1,13 +1,13 @@
 use std::collections::BTreeMap;
 
-use ramulator_wrapper::RamulatorWrapper;
+use ramulator_wrapper::{PresetConfigs, RamulatorWrapper};
 
 use crate::{
     satacc::{icnt::IcntMsgWrapper, wating_task::WaitingTask, MemReq, SataccStatus},
     sim::{InOutPort, SimComponent},
 };
 
-use super::{get_set_number_from_addr, AccessResult, FastCache};
+use super::{get_set_number_from_addr, AccessResult, CacheConfig, CacheId, FastCache};
 
 pub struct CacheWithRamulator {
     pub fast_cache: FastCache,
@@ -17,9 +17,29 @@ pub struct CacheWithRamulator {
     pub on_dram_reqs: BTreeMap<u64, Vec<MemReq>>,
     pub hit_latency: usize,
     pub temp_send_blocked_req: Option<MemReq>,
+    pub cache_id: CacheId,
 }
 
-impl CacheWithRamulator {}
+impl CacheWithRamulator {
+    pub fn new(
+        config: &CacheConfig,
+        req_ports: Vec<InOutPort<IcntMsgWrapper<MemReq>>>,
+        ramulator_preset: PresetConfigs,
+        hit_latency: usize,
+        cache_id: CacheId,
+    ) -> Self {
+        Self {
+            fast_cache: FastCache::new(config),
+            ramulator: RamulatorWrapper::new_with_preset(ramulator_preset, "ramu_stat.txt"),
+            req_ports,
+            on_going_reqs: WaitingTask::new(),
+            on_dram_reqs: BTreeMap::new(),
+            hit_latency,
+            temp_send_blocked_req: None,
+            cache_id,
+        }
+    }
+}
 
 impl SimComponent for CacheWithRamulator {
     type SharedStatus = SataccStatus;
@@ -63,12 +83,12 @@ impl SimComponent for CacheWithRamulator {
                                     log::debug!("hit");
                                     self.on_going_reqs
                                         .push(msg, current_cycle + self.hit_latency);
-                                    shared_status.cache_status.hits += 1;
+                                    shared_status.statistics.update_hit(&self.cache_id);
                                 }
                             };
                         }
                         AccessResult::Miss(tag) => {
-                            shared_status.cache_status.misses += 1;
+                            shared_status.statistics.update_miss(&self.cache_id);
                             log::debug!("miss at cycle: {current_cycle}");
 
                             match self.on_dram_reqs.get_mut(&tag) {
@@ -174,8 +194,9 @@ mod test {
             hit_latency: 14,
             temp_send_blocked_req: None,
             req_ports: inout_cache,
+            cache_id: CacheId::L3Cache,
         };
-        let mut status = SataccStatus::new();
+        let mut status = SataccStatus::default();
         for i in 0..1000 {
             inout_base[0]
                 .out_port

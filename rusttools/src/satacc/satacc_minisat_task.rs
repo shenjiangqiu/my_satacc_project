@@ -24,6 +24,27 @@ impl SingleRoundTask {
         self.assignments.push_front(task);
     }
 }
+#[derive(Default)]
+pub struct SingleRoundStatistics {
+    pub total_assignments: usize,
+    pub total_watchers: usize,
+    pub total_clauses: usize,
+}
+impl SingleRoundTask {
+    pub fn get_statistics(&self) -> SingleRoundStatistics {
+        let mut stat = SingleRoundStatistics::default();
+        for watcher_task in self.assignments.iter() {
+            stat.total_assignments += 1;
+            for clause_task in watcher_task.single_watcher_tasks.iter() {
+                stat.total_watchers += 1;
+                if clause_task.clause_data.is_some() {
+                    stat.total_clauses += 1;
+                }
+            }
+        }
+        stat
+    }
+}
 
 /// # WatcherTask
 /// the task for a single assignment that made by the softwares
@@ -300,7 +321,7 @@ impl WatcherTask {
         let partion_id = ((addr >> 6) & ((1 << 3) - 1)) as usize;
         IcntMsgWrapper {
             msg: MemReq {
-                addr: addr,
+                addr,
                 id: context.next_mem_id(),
                 mem_id: partion_id,
                 is_write: false,

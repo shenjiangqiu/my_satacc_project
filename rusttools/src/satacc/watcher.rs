@@ -72,6 +72,8 @@ impl SimComponent for Watcher {
             let id = mem_meta_task.msg.id;
             match self.cache_mem_icnt_sender.out_port.send(mem_meta_task) {
                 Ok(_) => {
+                    context.statistics.watcher_statistics[self.watcher_pe_id].total_assignments +=
+                        1;
                     self.mem_req_id_to_watcher_task.insert(id, watcher_task);
                     busy = true;
                 }
@@ -106,6 +108,8 @@ impl SimComponent for Watcher {
             busy = true;
             // start to read the watcher data!
             let signale_watcher_tasks = watcher_task.into_sub_single_watcher_task();
+            context.statistics.watcher_statistics[self.watcher_pe_id].total_watchers +=
+                signale_watcher_tasks.len();
             self.single_watcher_task_queue.extend(signale_watcher_tasks);
         }
         // then process the single watcher tasks
@@ -156,7 +160,11 @@ impl SimComponent for Watcher {
                     .clause_icnt_sender
                     .send(single_task.into_push_clause_req(self.total_watchers))
                 {
-                    Ok(_) => busy = true,
+                    Ok(_) => {
+                        busy = true;
+                        context.statistics.watcher_statistics[self.watcher_pe_id]
+                            .total_clauses_sent += 1;
+                    }
                     Err(clause_task) => {
                         // cannot send to cache now
                         let clause_task = clause_task.msg;
@@ -203,6 +211,14 @@ impl SimComponent for Watcher {
                     );
                 }
                 _ => unreachable!(),
+            }
+        }
+        match busy {
+            true => {
+                context.statistics.watcher_statistics[self.watcher_pe_id].busy_cycle += 1;
+            }
+            false => {
+                context.statistics.watcher_statistics[self.watcher_pe_id].idle_cycle += 1;
             }
         }
         busy

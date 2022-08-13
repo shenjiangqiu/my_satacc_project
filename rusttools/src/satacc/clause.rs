@@ -68,6 +68,9 @@ impl SimComponent for ClauseUnit {
             match self.mem_icnt_port.out_port.send(mem_req) {
                 Ok(_) => {
                     self.mem_req_id_to_clause_task.insert(id, task.msg);
+                    context.statistics.clause_statistics[self.watcher_pe_id].single_clause
+                        [self.clause_pe_id]
+                        .total_clause_received += 1;
                     busy = true;
                 }
                 Err(_e) => {
@@ -82,6 +85,9 @@ impl SimComponent for ClauseUnit {
             if let Some(task) = self.clause_data_ready_queue.pop_front() {
                 let mem_req =
                     task.get_read_clause_value_task(context, self.watcher_pe_id, self.clause_pe_id);
+                context.statistics.clause_statistics[self.watcher_pe_id].single_clause
+                    [self.clause_pe_id]
+                    .total_value_read += task.clause_data.as_ref().unwrap().clause_value_addr.len();
                 self.current_reading_value_task = Some(ClauseValueTracker {
                     clause_task: task,
                     waiting_to_send_reqs: mem_req.into_iter().collect(),
@@ -158,12 +164,25 @@ impl SimComponent for ClauseUnit {
             }
             busy = true;
         }
+        match busy {
+            true => {
+                context.statistics.clause_statistics[self.watcher_pe_id].single_clause
+                    [self.clause_pe_id]
+                    .busy_cycle += 1;
+            }
+            false => {
+                context.statistics.clause_statistics[self.watcher_pe_id].single_clause
+                    [self.clause_pe_id]
+                    .idle_cycle += 1;
+            }
+        }
         busy
     }
 }
 #[cfg(test)]
 mod test {
     use crate::{
+        config::Config,
         satacc::{
             icnt::IcntMsgWrapper,
             satacc_minisat_task::{ClauseData, ClauseTask},
@@ -187,7 +206,8 @@ mod test {
         let private_cache_port = private_cache_port_pair.0;
         let cluase_unit =
             ClauseUnit::new(clause_task_in, mem_icnt_port, private_cache_port, 0, 1, 0);
-        let context = SataccStatus::new();
+        let config = Config::default();
+        let context = SataccStatus::new(config);
         let mut sim_runner = SimRunner::new(cluase_unit, context);
         clause_task_port
             .0

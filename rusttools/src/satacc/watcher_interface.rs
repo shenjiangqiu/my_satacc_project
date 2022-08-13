@@ -1,7 +1,7 @@
 use crate::sim::{ChannelBuilder, InOutPort, SimComponent, SimReciver, SimSender};
 
 use super::{
-    cache::CacheWithFixTime,
+    cache::{CacheId, CacheWithFixTime},
     clause::ClauseUnit,
     icnt::IcntMsgWrapper,
     satacc_minisat_task::{ClauseTask, WatcherTask},
@@ -116,6 +116,7 @@ impl WatcherInterface {
             }],
             hit_latency,
             miss_latency,
+            CacheId::PrivateCache(watcher_pe_id),
         );
 
         Self {
@@ -229,6 +230,7 @@ mod test {
     use std::collections::VecDeque;
 
     use crate::{
+        config::Config,
         satacc::{
             satacc_minisat_task::{ClauseData, ClauseTask, WatcherTask},
             watcher_interface::WatcherInterface,
@@ -264,8 +266,9 @@ mod test {
             0,
             1,
         );
-
-        let shared_status = SataccStatus::new();
+        let mut config = Config::default();
+        config.n_clauses = 2;
+        let shared_status = SataccStatus::new(config);
         let mut sim_runner = SimRunner::new(watcher_interface, shared_status);
         // send the task to watcher interface, and it will be send to watcher, the wather will send a mem req for watcher meta data
         watcher_task_sender
@@ -317,8 +320,9 @@ mod test {
             0,
             1,
         );
-
-        let shared_status = SataccStatus::new();
+        let mut config = Config::default();
+        config.n_clauses = 2;
+        let shared_status = SataccStatus::new(config);
         let mut sim_runner = SimRunner::new(watcher_interface, shared_status);
         // send the task to watcher interface, and it will be send to watcher, the wather will send a mem req for watcher meta data
         let clause_task = ClauseTask {
@@ -375,8 +379,9 @@ mod test {
             0,
             1,
         );
-
-        let shared_status = SataccStatus::new();
+        let mut config = Config::default();
+        config.n_clauses = 2;
+        let shared_status = SataccStatus::new(config);
         let mut sim_runner = SimRunner::new(watcher_interface, shared_status);
         // send the task to watcher interface, and it will be send to watcher, the wather will send a mem req for watcher meta data
         let clause_task = ClauseTask {
