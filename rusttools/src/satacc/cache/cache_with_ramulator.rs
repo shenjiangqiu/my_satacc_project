@@ -64,7 +64,7 @@ impl SimComponent for CacheWithRamulator {
                     self.fast_cache.get_channel_bit_len(),
                 )
                 .1;
-                self.ramulator.send(req.addr, req.is_write);
+                self.ramulator.send(tag, req.is_write);
                 self.on_dram_reqs.insert(tag, vec![req]);
             } else {
                 self.temp_send_blocked_req = Some(req);
