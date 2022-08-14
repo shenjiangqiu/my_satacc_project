@@ -71,7 +71,7 @@ where
     T: IcntMessage,
 {
     type SharedStatus = SataccStatus;
-    fn update(&mut self, _: &mut Self::SharedStatus, current_cycle: usize) -> bool {
+    fn update(&mut self, context: &mut Self::SharedStatus, current_cycle: usize) -> bool {
         let mut busy = !self.in_transit_messages.is_empty();
 
         // from input to icnt transit
@@ -90,6 +90,14 @@ where
                 let output_row = output_port / self.row_size;
                 let output_col = output_port % self.row_size;
                 let cycle_to_go = input_row.abs_diff(output_row) + input_col.abs_diff(output_col);
+
+                context
+                    .statistics
+                    .icnt_statistics
+                    .average_latency
+                    .add(cycle_to_go);
+                context.statistics.icnt_statistics.total_messages += 1;
+
                 self.in_transit_messages
                     .push(message, current_cycle + cycle_to_go);
                 busy = true;
@@ -115,6 +123,10 @@ where
             }
         }
 
+        match busy {
+            true => context.statistics.icnt_statistics.busy_cycle += 1,
+            false => context.statistics.icnt_statistics.idle_cycle += 1,
+        }
         busy
     }
 }

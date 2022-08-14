@@ -63,6 +63,14 @@ impl AverageStat {
         self.total as f64 / self.count as f64
     }
 }
+
+#[derive(Debug, Serialize, Deserialize, Default)]
+pub struct IcntStat {
+    pub total_messages: usize,
+    pub average_latency: AverageStat,
+    pub idle_cycle: usize,
+    pub busy_cycle: usize,
+}
 #[derive(Debug, Serialize, Deserialize)]
 pub struct Statistics {
     pub total_cycle: usize,
@@ -72,6 +80,7 @@ pub struct Statistics {
     pub watcher_statistics: Vec<WatcherStatistics>,
     pub clause_statistics: Vec<ClauseStatistics>,
     pub private_cache_statistics: Vec<CacheStatistics>,
+    pub icnt_statistics: IcntStat,
     pub l3_cache_statistics: CacheStatistics,
     pub config: Config,
 }
@@ -101,6 +110,7 @@ impl Statistics {
             average_assignments: Default::default(),
             average_watchers: Default::default(),
             average_clauses: Default::default(),
+            icnt_statistics: IcntStat::default(),
         }
     }
     pub fn update_hit(&mut self, cache_id: &CacheId) {
