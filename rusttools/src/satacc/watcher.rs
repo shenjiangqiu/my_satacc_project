@@ -58,11 +58,19 @@ impl Watcher {
         }
     }
 }
-
+enum BusyReason {
+    NoTask,
+    CannotSendL3Cache,
+    CannotSendPrivateCache,
+    CannotSendClause,
+    WaitingL3Ret,
+    WaitingL1Ret,
+}
 impl SimComponent for Watcher {
     type SharedStatus = SataccStatus;
     fn update(&mut self, context: &mut Self::SharedStatus, current_cycle: usize) -> bool {
         let mut busy = false;
+        let mut reason = BusyReason::NoTask;
         // first check the new arrived watcher tasks
         if let Ok(watcher_task) = self.watcher_task_receiver.recv() {
             log::debug!("Watcher Receive task! {current_cycle}");
@@ -80,6 +88,7 @@ impl SimComponent for Watcher {
                 Err(_) => {
                     // cannot send to cache now
                     self.watcher_task_receiver.ret(watcher_task);
+                    reason = BusyReason::CannotSendL3Cache;
                 }
             }
         }
@@ -100,6 +109,7 @@ impl SimComponent for Watcher {
                 Err(_mem_watcher_task) => {
                     // cannot send to cache now
                     self.meta_finished_queue.push_front(watcher_task);
+                    reason = BusyReason::CannotSendL3Cache;
                 }
             }
         }
@@ -127,6 +137,7 @@ impl SimComponent for Watcher {
                 Err(_blocker_req) => {
                     // cannot send to cache now
                     self.single_watcher_task_queue.push_front(single_task);
+                    reason = BusyReason::CannotSendPrivateCache;
                 }
             }
         }
@@ -170,6 +181,7 @@ impl SimComponent for Watcher {
                         let clause_task = clause_task.msg;
                         self.single_watcher_process_finished_queue
                             .push_front(clause_task);
+                        reason = BusyReason::CannotSendClause;
                     }
                 }
             }
@@ -218,7 +230,45 @@ impl SimComponent for Watcher {
                 context.statistics.watcher_statistics[self.watcher_pe_id].busy_cycle += 1;
             }
             false => {
+                if !self.mem_req_id_to_clause_task.is_empty() {
+                    reason = BusyReason::WaitingL1Ret;
+                }
+                if !self.mem_req_id_to_watcher_task.is_empty() {
+                    reason = BusyReason::WaitingL3Ret;
+                }
                 context.statistics.watcher_statistics[self.watcher_pe_id].idle_cycle += 1;
+                match reason {
+                    BusyReason::NoTask => {
+                        context.statistics.watcher_statistics[self.watcher_pe_id]
+                            .idle_stat
+                            .idle_no_task += 1
+                    }
+                    BusyReason::CannotSendL3Cache => {
+                        context.statistics.watcher_statistics[self.watcher_pe_id]
+                            .idle_stat
+                            .idle_send_l3 += 1
+                    }
+                    BusyReason::CannotSendPrivateCache => {
+                        context.statistics.watcher_statistics[self.watcher_pe_id]
+                            .idle_stat
+                            .idle_send_l1 += 1
+                    }
+                    BusyReason::CannotSendClause => {
+                        context.statistics.watcher_statistics[self.watcher_pe_id]
+                            .idle_stat
+                            .idle_send_clause += 1
+                    }
+                    BusyReason::WaitingL3Ret => {
+                        context.statistics.watcher_statistics[self.watcher_pe_id]
+                            .idle_stat
+                            .idle_wating_l3 += 1
+                    }
+                    BusyReason::WaitingL1Ret => {
+                        context.statistics.watcher_statistics[self.watcher_pe_id]
+                            .idle_stat
+                            .idle_wating_l1 += 1
+                    }
+                }
             }
         }
         busy

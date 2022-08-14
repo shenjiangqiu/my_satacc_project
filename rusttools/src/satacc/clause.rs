@@ -26,6 +26,13 @@ pub struct ClauseUnit {
 
     mem_req_id_to_clause_task: BTreeMap<usize, ClauseTask>,
 }
+enum BusyReason {
+    NoTask,
+    WaitingL1,
+    WaitingL3,
+    SendingL1,
+    SendingL3,
+}
 impl ClauseUnit {
     pub fn new(
         clause_task_in: SimReciver<IcntMsgWrapper<ClauseTask>>,
@@ -56,6 +63,7 @@ impl SimComponent for ClauseUnit {
     fn update(&mut self, context: &mut Self::SharedStatus, current_cycle: usize) -> bool {
         let mut busy = self.current_processing_task.is_some();
         // first read the clause data
+        let mut busy_reason = BusyReason::NoTask;
         if let Ok(task) = self.clause_task_in.recv() {
             log::debug!("ClauseUnit Receive task! {current_cycle}");
             let mem_req = task.msg.get_clause_data_task(
@@ -77,12 +85,14 @@ impl SimComponent for ClauseUnit {
                     // cannot send to cache now
                     // just ret the task so we don't need the target port
                     self.clause_task_in.ret(task);
+                    busy_reason = BusyReason::SendingL3;
                 }
             }
         }
-        // try to start to read the clause value
+        // try get a task to start to read the clause value
         if self.current_reading_value_task.is_none() {
             if let Some(task) = self.clause_data_ready_queue.pop_front() {
+                busy = true;
                 let mem_req =
                     task.get_read_clause_value_task(context, self.watcher_pe_id, self.clause_pe_id);
                 context.statistics.clause_statistics[self.watcher_pe_id].single_clause
@@ -108,6 +118,7 @@ impl SimComponent for ClauseUnit {
                         // cannot send to cache now
                         // just ret the task so we don't need the target port
                         reqs.waiting_to_send_reqs.push_front(e);
+                        busy_reason = BusyReason::SendingL1;
                     }
                 }
             }
@@ -174,6 +185,26 @@ impl SimComponent for ClauseUnit {
                 context.statistics.clause_statistics[self.watcher_pe_id].single_clause
                     [self.clause_pe_id]
                     .idle_cycle += 1;
+                // some l3 req in flight
+                if !self.mem_req_id_to_clause_task.is_empty() {
+                    busy_reason = BusyReason::WaitingL3;
+                }
+                // some private cache inflight
+                if let Some(tracker) = &self.current_reading_value_task {
+                    if !tracker.unfinished_req_id.is_empty() {
+                        busy_reason = BusyReason::WaitingL1;
+                    }
+                }
+                let idle_stat = &mut context.statistics.clause_statistics[self.watcher_pe_id]
+                    .single_clause[self.clause_pe_id]
+                    .idle_stat;
+                match busy_reason {
+                    BusyReason::NoTask => idle_stat.idle_no_task += 1,
+                    BusyReason::WaitingL1 => idle_stat.idle_wating_l1 += 1,
+                    BusyReason::WaitingL3 => idle_stat.idle_wating_l3 += 1,
+                    BusyReason::SendingL1 => idle_stat.idle_send_l1 += 1,
+                    BusyReason::SendingL3 => idle_stat.idle_send_l3 += 1,
+                }
             }
         }
         busy

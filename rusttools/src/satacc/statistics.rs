@@ -8,6 +8,17 @@ pub struct CacheStatistics {
     pub cache_hits: usize,
     pub cache_misses: usize,
 }
+
+#[derive(Debug, Serialize, Deserialize, Default, Clone)]
+pub struct WatcherIdleStat {
+    pub idle_no_task: usize,
+    pub idle_wating_l1: usize,
+    pub idle_wating_l3: usize,
+    pub idle_send_l1: usize,
+    pub idle_send_l3: usize,
+    pub idle_send_clause: usize,
+}
+
 #[derive(Debug, Serialize, Deserialize, Default, Clone)]
 pub struct WatcherStatistics {
     pub total_assignments: usize,
@@ -15,15 +26,25 @@ pub struct WatcherStatistics {
     pub total_clauses_sent: usize,
     pub idle_cycle: usize,
     pub busy_cycle: usize,
+    pub idle_stat: WatcherIdleStat,
 }
-
+#[derive(Debug, Serialize, Deserialize, Default, Clone)]
+pub struct ClauseIdleStat {
+    pub idle_no_task: usize,
+    pub idle_wating_l1: usize,
+    pub idle_wating_l3: usize,
+    pub idle_send_l1: usize,
+    pub idle_send_l3: usize,
+}
 #[derive(Debug, Serialize, Deserialize, Default, Clone)]
 pub struct SingleClauseStatistics {
     pub total_clause_received: usize,
     pub total_value_read: usize,
     pub idle_cycle: usize,
     pub busy_cycle: usize,
+    pub idle_stat: ClauseIdleStat,
 }
+
 #[derive(Debug, Serialize, Deserialize, Default, Clone)]
 pub struct ClauseStatistics {
     pub single_clause: Vec<SingleClauseStatistics>,
