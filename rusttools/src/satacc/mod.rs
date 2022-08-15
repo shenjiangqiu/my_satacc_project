@@ -2,7 +2,7 @@ pub(self) mod cache;
 pub(self) mod clause;
 pub(self) mod icnt;
 pub(self) mod satacc_minisat_task;
-pub(self) mod simulator;
+pub mod simulator;
 pub(self) mod statistics;
 pub(self) mod trail;
 pub(self) mod watcher;

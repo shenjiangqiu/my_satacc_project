@@ -84,6 +84,18 @@ where
             shared_status,
         }
     }
+    pub fn get_sim(&self) -> &T {
+        &self.sim
+    }
+    pub fn get_shared_status(&self) -> &S {
+        &self.shared_status
+    }
+    pub fn get_sim_mut(&mut self) -> &mut T {
+        &mut self.sim
+    }
+    pub fn get_shared_status_mut(&mut self) -> &mut S {
+        &mut self.shared_status
+    }
     pub fn run(&mut self) {
         while self.sim.update(&mut self.shared_status, self.current_cycle) {
             self.current_cycle += 1;
@@ -248,6 +260,90 @@ impl<T> SimReciver<T> {
             (*self.current_value_size.get()) += 1;
             buffer.push_front(data);
         }
+    }
+}
+
+impl<A, B> SimComponent for (A, B)
+where
+    A: SimComponent,
+    B: SimComponent<SharedStatus = A::SharedStatus>,
+{
+    type SharedStatus = A::SharedStatus;
+
+    fn update(&mut self, shared_status: &mut Self::SharedStatus, current_cycle: usize) -> bool {
+        self.0.update(shared_status, current_cycle) || self.1.update(shared_status, current_cycle)
+    }
+}
+
+impl<A, B, C> SimComponent for (A, B, C)
+where
+    A: SimComponent,
+    B: SimComponent<SharedStatus = A::SharedStatus>,
+    C: SimComponent<SharedStatus = B::SharedStatus>,
+{
+    type SharedStatus = A::SharedStatus;
+
+    fn update(&mut self, shared_status: &mut Self::SharedStatus, current_cycle: usize) -> bool {
+        self.0.update(shared_status, current_cycle)
+            || self.1.update(shared_status, current_cycle)
+            || self.2.update(shared_status, current_cycle)
+    }
+}
+
+impl<A, B, C, D> SimComponent for (A, B, C, D)
+where
+    A: SimComponent,
+    B: SimComponent<SharedStatus = A::SharedStatus>,
+    C: SimComponent<SharedStatus = B::SharedStatus>,
+    D: SimComponent<SharedStatus = C::SharedStatus>,
+{
+    type SharedStatus = A::SharedStatus;
+
+    fn update(&mut self, shared_status: &mut Self::SharedStatus, current_cycle: usize) -> bool {
+        self.0.update(shared_status, current_cycle)
+            || self.1.update(shared_status, current_cycle)
+            || self.2.update(shared_status, current_cycle)
+            || self.3.update(shared_status, current_cycle)
+    }
+}
+
+impl<A, B, C, D, E> SimComponent for (A, B, C, D, E)
+where
+    A: SimComponent,
+    B: SimComponent<SharedStatus = A::SharedStatus>,
+    C: SimComponent<SharedStatus = B::SharedStatus>,
+    D: SimComponent<SharedStatus = C::SharedStatus>,
+    E: SimComponent<SharedStatus = D::SharedStatus>,
+{
+    type SharedStatus = A::SharedStatus;
+
+    fn update(&mut self, shared_status: &mut Self::SharedStatus, current_cycle: usize) -> bool {
+        self.0.update(shared_status, current_cycle)
+            || self.1.update(shared_status, current_cycle)
+            || self.2.update(shared_status, current_cycle)
+            || self.3.update(shared_status, current_cycle)
+            || self.4.update(shared_status, current_cycle)
+    }
+}
+
+impl<A, B, C, D, E, F> SimComponent for (A, B, C, D, E, F)
+where
+    A: SimComponent,
+    B: SimComponent<SharedStatus = A::SharedStatus>,
+    C: SimComponent<SharedStatus = B::SharedStatus>,
+    D: SimComponent<SharedStatus = C::SharedStatus>,
+    E: SimComponent<SharedStatus = D::SharedStatus>,
+    F: SimComponent<SharedStatus = E::SharedStatus>,
+{
+    type SharedStatus = A::SharedStatus;
+
+    fn update(&mut self, shared_status: &mut Self::SharedStatus, current_cycle: usize) -> bool {
+        self.0.update(shared_status, current_cycle)
+            || self.1.update(shared_status, current_cycle)
+            || self.2.update(shared_status, current_cycle)
+            || self.3.update(shared_status, current_cycle)
+            || self.4.update(shared_status, current_cycle)
+            || self.5.update(shared_status, current_cycle)
     }
 }
 

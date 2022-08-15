@@ -1,6 +1,7 @@
 use std::fs::File;
 
 use env_logger::Env;
+use serde::{Deserialize, Serialize};
 
 use crate::{
     config::Config,
@@ -11,7 +12,7 @@ use crate::{
         watcher_interface::WatcherInterface,
         MemReq, SataccStatus,
     },
-    sim::{AndSim, ChannelBuilder, Connectable, SimComponent, SimRunner, SimSender},
+    sim::{ChannelBuilder, SimComponent, SimRunner, SimSender},
 };
 
 use super::{
@@ -25,15 +26,43 @@ pub struct Simulator {
 pub struct SimulatorWapper {
     total_rounds: usize,
     task_sender: SimSender<SingleRoundTask>,
-    sim_runner: SimRunner<MySataccCompType, SataccStatus>,
+    sim_runner: SimRunner<TrailAndOthers, SataccStatus>,
 }
-type MySataccCompType = AndSim<
-    AndSim<
-        AndSim<AndSim<Trail, Vec<WatcherInterface>>, SimpleIcnt<IcntMsgWrapper<MemReq>>>,
+#[repr(C)]
+#[derive(Debug, Deserialize, Serialize, Clone, Copy)]
+pub enum RunMode {
+    NoGapBtweenRounds,
+    RealRoundGap,
+}
+pub struct TrailAndOthers {
+    trail: Trail,
+    others: (
+        Vec<WatcherInterface>,
+        SimpleIcnt<IcntMsgWrapper<MemReq>>,
         SimpleIcnt<IcntMsgWrapper<ClauseTask>>,
-    >,
-    Box<dyn SimComponent<SharedStatus = SataccStatus>>,
->;
+        Box<dyn SimComponent<SharedStatus = SataccStatus>>,
+    ),
+    current_running_mode: RunMode,
+}
+
+impl SimComponent for TrailAndOthers {
+    type SharedStatus = SataccStatus;
+
+    fn update(&mut self, shared_status: &mut Self::SharedStatus, current_cycle: usize) -> bool {
+        match self.current_running_mode {
+            RunMode::NoGapBtweenRounds => {
+                let trail_busy = self.trail.update(shared_status, current_cycle);
+                let _others_busy = self.others.update(shared_status, current_cycle);
+                trail_busy
+            }
+            RunMode::RealRoundGap => {
+                self.trail.update(shared_status, current_cycle)
+                    || self.others.update(shared_status, current_cycle)
+            }
+        }
+    }
+}
+
 impl Simulator {
     pub fn new(config_file: &str) -> Self {
         Self {
@@ -56,7 +85,7 @@ impl Simulator {
 
         let simulator = Self::new_from_config(config.clone());
 
-        let (task_sender, comp) = simulator.build();
+        let (task_sender, comp) = simulator.build(config.init_running_mode);
         let shared_status = SataccStatus::new(config);
         let sim_runner = SimRunner::new(comp, shared_status);
         let wapper = SimulatorWapper {
@@ -90,7 +119,11 @@ impl Simulator {
     #[no_mangle]
     pub extern "C" fn finish_simulator(task: *mut SataccMinisatTask, sim: *mut SimulatorWapper) {
         unsafe {
-            let sim: SimulatorWapper = *Box::from_raw(sim);
+            let mut sim: SimulatorWapper = *Box::from_raw(sim);
+
+            sim.sim_runner.get_sim_mut().current_running_mode = RunMode::RealRoundGap;
+            sim.sim_runner.run();
+
             log::info!(
                 "finish simulator cycle:{}",
                 sim.sim_runner.get_current_cycle()
@@ -111,9 +144,13 @@ impl Simulator {
             .try_init()
             .unwrap_or_default();
         let mut task = unsafe { Box::from_raw(task) };
-        let config = Config::from_config_file("satacc_config.toml").unwrap();
+        let config = Config {
+            init_running_mode: RunMode::RealRoundGap,
+            ..Config::from_config_file("satacc_config.toml").unwrap()
+        };
+
         let simulator = Self::new_from_config(config.clone());
-        let (task_sender, comp) = simulator.build();
+        let (task_sender, comp) = simulator.build(config.init_running_mode);
         let shared_status = SataccStatus::new(config);
         let mut sim_runner = SimRunner::new(comp, shared_status);
         while let Some(single_round_task) = task.pop_next_task() {
@@ -131,7 +168,7 @@ impl Simulator {
         status.save_statistics("statistics.json");
         serde_json::to_writer_pretty(File::create("cycle.json").unwrap(), &cycle).unwrap();
     }
-    pub fn build(&self) -> (SimSender<SingleRoundTask>, MySataccCompType) {
+    pub fn build(&self, init_runing_mode: RunMode) -> (SimSender<SingleRoundTask>, TrailAndOthers) {
         let channel_builder = ChannelBuilder::new();
 
         // build the trail
@@ -218,11 +255,12 @@ impl Simulator {
                     Box::new(cache)
                 }
             };
-        let simulator = trail
-            .connect(watchers_interface)
-            .connect(mem_icnt)
-            .connect(clause_icnt)
-            .connect(shared_l3_cache);
+        let simulator = TrailAndOthers {
+            trail,
+            others: (watchers_interface, mem_icnt, clause_icnt, shared_l3_cache),
+            current_running_mode: init_runing_mode,
+        };
+
         (outer_to_trail_ports.0, simulator)
     }
 }
@@ -241,7 +279,7 @@ mod test {
         test_utils,
     };
 
-    use super::Simulator;
+    use super::{RunMode, Simulator};
 
     #[test]
     fn test_simulator() {
@@ -268,6 +306,7 @@ mod test {
             channel_size: 16,
             l3_cache_type: CacheType::Simple,
             ramu_cache_config: PresetConfigs::HBM,
+            init_running_mode: RunMode::RealRoundGap,
             private_cache_config: CacheConfig {
                 sets: 16,
                 associativity: 2,
@@ -285,7 +324,7 @@ mod test {
             miss_latency: 120,
         };
         let simulator = Simulator::new_from_config(config.clone());
-        let (task_sender, comp) = simulator.build();
+        let (task_sender, comp) = simulator.build(config.init_running_mode);
         let status = SataccStatus::new(config);
         let mut sim_runner = SimRunner::new(comp, status);
         task_sender

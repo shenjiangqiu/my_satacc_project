@@ -1,0 +1,36 @@
+watcher_to_clause_type = 'Icnt'
+n_watchers = 16
+n_clauses = 1
+mems = 8
+icnt = 'Mesh'
+seq = false
+ideal_memory = false
+ideal_l3cache = false
+multi_port = 1
+dram_config = 'HBM'
+watcher_to_clause_icnt = 'Mesh'
+watcher_to_writer_icnt = 'Mesh'
+num_writer_entry = 1
+num_writer_merge = 1
+single_watcher = false
+private_cache_size = 1
+l3_cache_size = 1
+channel_size = 16
+l3_cache_type = 'Simple'
+ramu_cache_config = 'HBM'
+l1_hit_latency = 1
+l3_hit_latency = 15
+miss_latency = 120
+init_running_mode = 'RealRoundGap'
+
+[private_cache_config]
+sets = 4
+associativity = 4
+block_size = 64
+channels = 1
+
+[l3_cache_config]
+sets = 65536
+associativity = 4
+block_size = 64
+channels = 8

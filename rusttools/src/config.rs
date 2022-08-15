@@ -5,7 +5,7 @@ use std::{ffi::CStr, fs};
 
 use serde::{Deserialize, Serialize};
 
-use crate::satacc::CacheConfig;
+use crate::satacc::{simulator::RunMode, CacheConfig};
 
 /// The type for the watcher sending to the clase
 #[repr(C)]
@@ -68,6 +68,7 @@ pub struct Config {
     pub l1_hit_latency: usize,
     pub l3_hit_latency: usize,
     pub miss_latency: usize,
+    pub init_running_mode: RunMode,
     pub private_cache_config: CacheConfig,
     pub l3_cache_config: CacheConfig,
 }
@@ -95,6 +96,7 @@ impl Default for Config {
             l3_cache_size: 1,
             channel_size: 16,
             l3_cache_type: CacheType::Simple,
+            init_running_mode: RunMode::RealRoundGap,
             ramu_cache_config: ramulator_wrapper::PresetConfigs::HBM,
             private_cache_config: CacheConfig {
                 sets: 4,
@@ -150,7 +152,7 @@ mod test {
     #[ignore]
     fn test_generate_config_file() {
         let config = Config::default();
-        let config_file = "satacc_config.toml";
+        let config_file = "satacc_config_sample.toml";
         let content = toml::to_string_pretty(&config).unwrap();
         fs::write(config_file, content).unwrap();
     }
