@@ -16,12 +16,12 @@ pub struct Set {
 }
 #[derive(Clone, Debug, Serialize, Deserialize)]
 #[repr(C)]
-
 pub struct CacheConfig {
     pub sets: u64,
     pub associativity: u64,
     pub block_size: u64,
     pub channels: u64,
+    pub alway_hit: bool,
 }
 
 impl FastCache {
@@ -51,21 +51,28 @@ impl FastCache {
             self.block_bit_len,
             self.channel_bit_len,
         );
-        let set = &mut self.sets[set_number as usize];
-        for line in &set.lines {
-            if *line == tag {
-                return AccessResult::Hit(tag);
+        // todo! always hit
+        match self.cache_config.alway_hit {
+            true => AccessResult::Hit(tag),
+            false => {
+                let set = &mut self.sets[set_number as usize];
+                for line in &set.lines {
+                    if *line == tag {
+                        return AccessResult::Hit(tag);
+                    }
+                }
+                // not in the set
+                if set.lines.len() < self.cache_config.associativity as usize {
+                    set.lines.push(tag);
+                } else {
+                    set.lines[set.replace_ptr] = tag;
+                    set.replace_ptr =
+                        (set.replace_ptr + 1) % self.cache_config.associativity as usize;
+                }
+
+                AccessResult::Miss(tag)
             }
         }
-        // not in the set
-        if set.lines.len() < self.cache_config.associativity as usize {
-            set.lines.push(tag);
-        } else {
-            set.lines[set.replace_ptr] = tag;
-            set.replace_ptr = (set.replace_ptr + 1) % self.cache_config.associativity as usize;
-        }
-
-        AccessResult::Miss(tag)
     }
     pub fn get_set_bit_len(&self) -> u64 {
         self.set_bit_len
@@ -88,6 +95,7 @@ mod test {
             associativity: 2,
             block_size: 4,
             channels: 1,
+            alway_hit: false,
         };
         let mut cache = FastCache::new(&cache_config);
         // the first one is miss and then the later 4 is in a block so it's hit

@@ -1,3 +1,5 @@
+use std::fmt::Debug;
+
 use crate::sim::{ChannelBuilder, InOutPort, SimComponent};
 
 use super::{wating_task::WaitingTask, SataccStatus};
@@ -68,44 +70,52 @@ impl<T> IcntMessage for IcntMsgWrapper<T> {
 }
 impl<T> SimComponent for SimpleIcnt<T>
 where
-    T: IcntMessage,
+    T: IcntMessage + Debug,
 {
     type SharedStatus = SataccStatus;
-    fn update(&mut self, context: &mut Self::SharedStatus, current_cycle: usize) -> bool {
+    fn update(&mut self, context: &mut Self::SharedStatus, current_cycle: usize) -> (bool, bool) {
         let mut busy = !self.in_transit_messages.is_empty();
-
+        let mut updated = false;
         // from input to icnt transit
-        for (
-            input_port,
-            InOutPort {
-                in_port,
-                out_port: _,
-            },
-        ) in self.ports.iter_mut().enumerate()
-        {
-            if let Ok(message) = in_port.recv() {
-                let output_port = message.get_target_port();
-                let input_row = input_port / self.row_size;
-                let input_col = input_port % self.row_size;
-                let output_row = output_port / self.row_size;
-                let output_col = output_port % self.row_size;
-                let cycle_to_go = input_row.abs_diff(output_row) + input_col.abs_diff(output_col);
+        if self.in_transit_messages.len() < 1024 {
+            for (
+                input_port,
+                InOutPort {
+                    in_port,
+                    out_port: _,
+                },
+            ) in self.ports.iter_mut().enumerate()
+            {
+                if let Ok(message) = in_port.recv() {
+                    let output_port = message.get_target_port();
+                    let input_row = input_port / self.row_size;
+                    let input_col = input_port % self.row_size;
+                    let output_row = output_port / self.row_size;
+                    let output_col = output_port % self.row_size;
+                    let cycle_to_go =
+                        input_row.abs_diff(output_row) + input_col.abs_diff(output_col);
 
-                context
-                    .statistics
-                    .icnt_statistics
-                    .average_latency
-                    .add(cycle_to_go);
-                context.statistics.icnt_statistics.total_messages += 1;
+                    context
+                        .statistics
+                        .icnt_statistics
+                        .average_latency
+                        .add(cycle_to_go);
+                    context.statistics.icnt_statistics.total_messages += 1;
 
-                self.in_transit_messages
-                    .push(message, current_cycle + cycle_to_go);
-                busy = true;
+                    // self.in_transit_messages
+                    //     .push(message, current_cycle + cycle_to_go);
+                    self.in_transit_messages.push(message, current_cycle + 1);
+                    busy = true;
+                    updated = true;
+                    log::debug!("recv message from port {}", input_port);
+                    log::debug!("are going to send to port {}", output_port);
+                }
             }
         }
 
         // from icnt to output
         while let Some((leaving_cycle, message)) = self.in_transit_messages.pop() {
+            busy = true;
             if leaving_cycle > current_cycle {
                 self.in_transit_messages.push(message, leaving_cycle);
                 break;
@@ -113,9 +123,14 @@ where
                 let output_port = message.get_target_port();
                 match self.ports[output_port].out_port.send(message) {
                     Ok(_) => {
-                        busy = true;
+                        updated = true;
+                        log::debug!("send finished message to port {}", output_port);
                     }
                     Err(message) => {
+                        log::debug!(
+                            "send failed message to port {} with message: {message:?}",
+                            output_port
+                        );
                         self.in_transit_messages.push(message, leaving_cycle);
                         break;
                     }
@@ -123,11 +138,11 @@ where
             }
         }
 
-        match busy {
+        match updated {
             true => context.statistics.icnt_statistics.busy_cycle += 1,
             false => context.statistics.icnt_statistics.idle_cycle += 1,
         }
-        busy
+        (busy, updated)
     }
 }
 

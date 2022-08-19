@@ -1,8 +1,14 @@
+#![allow(non_snake_case)]
 use std::{cell::UnsafeCell, collections::VecDeque, rc::Rc};
 
 pub trait SimComponent {
     type SharedStatus;
-    fn update(&mut self, shared_status: &mut Self::SharedStatus, current_cycle: usize) -> bool;
+    /// update the component, return(busy, updated)
+    fn update(
+        &mut self,
+        shared_status: &mut Self::SharedStatus,
+        current_cycle: usize,
+    ) -> (bool, bool);
 }
 pub trait Connectable: SimComponent + Sized {
     fn connect<T>(self, other: T) -> AndSim<Self, T>
@@ -15,7 +21,11 @@ pub trait Connectable: SimComponent + Sized {
 
 impl<Status> SimComponent for Box<dyn SimComponent<SharedStatus = Status>> {
     type SharedStatus = Status;
-    fn update(&mut self, shared_status: &mut Self::SharedStatus, current_cycle: usize) -> bool {
+    fn update(
+        &mut self,
+        shared_status: &mut Self::SharedStatus,
+        current_cycle: usize,
+    ) -> (bool, bool) {
         self.as_mut().update(shared_status, current_cycle)
     }
 }
@@ -47,24 +57,49 @@ where
     B: SimComponent<SharedStatus = A::SharedStatus>,
 {
     type SharedStatus = A::SharedStatus;
-    fn update(&mut self, shared_status: &mut Self::SharedStatus, current_cycle: usize) -> bool {
+    fn update(
+        &mut self,
+        shared_status: &mut Self::SharedStatus,
+        current_cycle: usize,
+    ) -> (bool, bool) {
         let a_result = self.a.update(shared_status, current_cycle);
         let b_result = self.b.update(shared_status, current_cycle);
 
-        a_result || b_result
+        (a_result.0 || b_result.0, a_result.1 || b_result.1)
+    }
+}
+impl<T, C> SimComponent for &mut T
+where
+    T: SimComponent<SharedStatus = C>,
+{
+    type SharedStatus = C;
+    fn update(
+        &mut self,
+        shared_status: &mut Self::SharedStatus,
+        current_cycle: usize,
+    ) -> (bool, bool) {
+        (*self).update(shared_status, current_cycle)
     }
 }
 
-impl<T> SimComponent for Vec<T>
+impl<T, C> SimComponent for Vec<T>
 where
-    T: SimComponent,
+    T: SimComponent<SharedStatus = C>,
 {
-    type SharedStatus = T::SharedStatus;
-    fn update(&mut self, shared_status: &mut Self::SharedStatus, current_cycle: usize) -> bool {
-        self.iter_mut()
+    type SharedStatus = C;
+    fn update(
+        &mut self,
+        shared_status: &mut Self::SharedStatus,
+        current_cycle: usize,
+    ) -> (bool, bool) {
+        // first collect to make sure all components are updated
+        let result: Vec<_> = self
+            .iter_mut()
             .map(|item| item.update(shared_status, current_cycle))
-            .collect::<Vec<_>>()
-            .contains(&true)
+            .collect();
+        let busy = result.iter().any(|&(busy, _)| busy);
+        let updated = result.iter().any(|&(_, updated)| updated);
+        (busy, updated)
     }
 }
 #[derive(Debug)]
@@ -97,7 +132,27 @@ where
         &mut self.shared_status
     }
     pub fn run(&mut self) {
-        while self.sim.update(&mut self.shared_status, self.current_cycle) {
+        loop {
+            let result = self.sim.update(&mut self.shared_status, self.current_cycle);
+            match result {
+                (true, true) => {
+                    self.current_cycle += 1;
+                }
+                (true, false) => {
+                    log::error!(
+                        "simulation is busy but not updated at cycle {}",
+                        self.current_cycle
+                    );
+                    panic!(
+                        "simulation is busy but not updated at cycle {}",
+                        self.current_cycle
+                    );
+                }
+                (false, _) => {
+                    // not busy, so we are done
+                    break;
+                }
+            }
             self.current_cycle += 1;
         }
     }
@@ -262,90 +317,20 @@ impl<T> SimReciver<T> {
         }
     }
 }
-
-impl<A, B> SimComponent for (A, B)
-where
-    A: SimComponent,
-    B: SimComponent<SharedStatus = A::SharedStatus>,
-{
-    type SharedStatus = A::SharedStatus;
-
-    fn update(&mut self, shared_status: &mut Self::SharedStatus, current_cycle: usize) -> bool {
-        self.0.update(shared_status, current_cycle) || self.1.update(shared_status, current_cycle)
-    }
-}
-
-impl<A, B, C> SimComponent for (A, B, C)
-where
-    A: SimComponent,
-    B: SimComponent<SharedStatus = A::SharedStatus>,
-    C: SimComponent<SharedStatus = B::SharedStatus>,
-{
-    type SharedStatus = A::SharedStatus;
-
-    fn update(&mut self, shared_status: &mut Self::SharedStatus, current_cycle: usize) -> bool {
-        self.0.update(shared_status, current_cycle)
-            || self.1.update(shared_status, current_cycle)
-            || self.2.update(shared_status, current_cycle)
-    }
-}
-
-impl<A, B, C, D> SimComponent for (A, B, C, D)
-where
-    A: SimComponent,
-    B: SimComponent<SharedStatus = A::SharedStatus>,
-    C: SimComponent<SharedStatus = B::SharedStatus>,
-    D: SimComponent<SharedStatus = C::SharedStatus>,
-{
-    type SharedStatus = A::SharedStatus;
-
-    fn update(&mut self, shared_status: &mut Self::SharedStatus, current_cycle: usize) -> bool {
-        self.0.update(shared_status, current_cycle)
-            || self.1.update(shared_status, current_cycle)
-            || self.2.update(shared_status, current_cycle)
-            || self.3.update(shared_status, current_cycle)
-    }
-}
-
-impl<A, B, C, D, E> SimComponent for (A, B, C, D, E)
-where
-    A: SimComponent,
-    B: SimComponent<SharedStatus = A::SharedStatus>,
-    C: SimComponent<SharedStatus = B::SharedStatus>,
-    D: SimComponent<SharedStatus = C::SharedStatus>,
-    E: SimComponent<SharedStatus = D::SharedStatus>,
-{
-    type SharedStatus = A::SharedStatus;
-
-    fn update(&mut self, shared_status: &mut Self::SharedStatus, current_cycle: usize) -> bool {
-        self.0.update(shared_status, current_cycle)
-            || self.1.update(shared_status, current_cycle)
-            || self.2.update(shared_status, current_cycle)
-            || self.3.update(shared_status, current_cycle)
-            || self.4.update(shared_status, current_cycle)
-    }
-}
-
-impl<A, B, C, D, E, F> SimComponent for (A, B, C, D, E, F)
-where
-    A: SimComponent,
-    B: SimComponent<SharedStatus = A::SharedStatus>,
-    C: SimComponent<SharedStatus = B::SharedStatus>,
-    D: SimComponent<SharedStatus = C::SharedStatus>,
-    E: SimComponent<SharedStatus = D::SharedStatus>,
-    F: SimComponent<SharedStatus = E::SharedStatus>,
-{
-    type SharedStatus = A::SharedStatus;
-
-    fn update(&mut self, shared_status: &mut Self::SharedStatus, current_cycle: usize) -> bool {
-        self.0.update(shared_status, current_cycle)
-            || self.1.update(shared_status, current_cycle)
-            || self.2.update(shared_status, current_cycle)
-            || self.3.update(shared_status, current_cycle)
-            || self.4.update(shared_status, current_cycle)
-            || self.5.update(shared_status, current_cycle)
-    }
-}
+impl_for_tuples_with_type!(SimComponent;update;SharedStatus;
+    (A),
+    (A,B),
+    (A,B,C),
+    (A,B,C,D),
+    (A,B,C,D,E),
+    (A,B,C,D,E,F),
+    (A,B,C,D,E,F,G),
+    (A,B,C,D,E,F,G,H),
+    (A,B,C,D,E,F,G,H,I),
+    (A,B,C,D,E,F,G,H,I,J),
+    (A,B,C,D,E,F,G,H,I,J,K),
+    (A,B,C,D,E,F,G,H,I,J,K,L),
+    (A,B,C,D,E,F,G,H,I,J,K,L,M),);
 
 #[cfg(test)]
 mod test {
@@ -357,17 +342,17 @@ mod test {
     }
     impl SimComponent for TaskSender {
         type SharedStatus = ();
-        fn update(&mut self, _: &mut Self::SharedStatus, _current_cycle: usize) -> bool {
+        fn update(&mut self, _: &mut Self::SharedStatus, _current_cycle: usize) -> (bool, bool) {
             if self.current_taks_id < 100 {
                 match self.task_sender.send(self.current_taks_id) {
                     Ok(_) => {
                         self.current_taks_id += 1;
-                        true
+                        (true, true)
                     }
-                    Err(_) => false,
+                    Err(_) => (false, false),
                 }
             } else {
-                false
+                (false, false)
             }
         }
     }
@@ -377,13 +362,13 @@ mod test {
     }
     impl SimComponent for TaskReceiver {
         type SharedStatus = ();
-        fn update(&mut self, _: &mut Self::SharedStatus, current_cycle: usize) -> bool {
+        fn update(&mut self, _: &mut Self::SharedStatus, current_cycle: usize) -> (bool, bool) {
             match self.task_receiver.recv() {
                 Ok(id) => {
                     println!("{current_cycle}:{id}");
-                    true
+                    (true, true)
                 }
-                Err(_) => false,
+                Err(_) => (false, false),
             }
         }
     }

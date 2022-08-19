@@ -138,18 +138,23 @@ impl WatcherInterface {
 
 impl SimComponent for WatcherInterface {
     type SharedStatus = SataccStatus;
-    fn update(&mut self, shared_status: &mut Self::SharedStatus, current_cycle: usize) -> bool {
+    fn update(
+        &mut self,
+        shared_status: &mut Self::SharedStatus,
+        current_cycle: usize,
+    ) -> (bool, bool) {
         let mut busy = false;
-
+        let mut updated = false;
         // receive the clause task
         if let Ok(clause_task) = self.task_icnt_receiver.recv() {
+            busy = true;
             let id = clause_task
                 .msg
                 .get_inner_clause_pe_id(self.num_clauses_per_watcher);
             match self.clause_task_senders[id].send(clause_task) {
                 Ok(_) => {
                     log::debug!("WatcherInterface Send task to clause:{id}! {current_cycle}");
-                    busy = true;
+                    updated = true;
                 }
                 Err(clause_task) => {
                     self.task_icnt_receiver.ret(clause_task);
@@ -157,6 +162,7 @@ impl SimComponent for WatcherInterface {
             }
         }
         if let Ok(mem_req) = self.mem_icnt_interface_receiver.recv() {
+            busy = true;
             match mem_req.msg.req_type {
                 MemReqType::ClauseReadData(clause_inner_id) => {
                     match self.clause_mem_senders[clause_inner_id].send(mem_req) {
@@ -164,7 +170,7 @@ impl SimComponent for WatcherInterface {
                             log::debug!(
                                 "WatcherInterface Send mem req to clause:{clause_inner_id}! {current_cycle}",
                             );
-                            busy = true;
+                            updated = true;
                         }
                         Err(mem_req) => {
                             self.mem_icnt_interface_receiver.ret(mem_req);
@@ -177,7 +183,7 @@ impl SimComponent for WatcherInterface {
                 {
                     Ok(_) => {
                         log::debug!("WatcherInterface Send mem req to watcher! {current_cycle}");
-                        busy = true;
+                        updated = true;
                     }
                     Err(mem_req) => {
                         self.mem_icnt_interface_receiver.ret(mem_req);
@@ -188,6 +194,7 @@ impl SimComponent for WatcherInterface {
         }
         // recv the private cache, it should contains clause value and watcher
         if let Ok(mem_req) = self.private_cache_out_receiver.recv() {
+            busy = true;
             match mem_req.msg.req_type {
                 MemReqType::ClauseReadValue(clause_inner_id) => {
                     match self.clause_private_cache_senders[clause_inner_id].send(mem_req) {
@@ -195,7 +202,7 @@ impl SimComponent for WatcherInterface {
                             log::debug!(
                                 "WatcherInterface Send mem req to clause:{clause_inner_id}! {current_cycle}",
                             );
-                            busy = true;
+                            updated = true;
                         }
                         Err(mem_req) => {
                             self.private_cache_out_receiver.ret(mem_req);
@@ -208,7 +215,7 @@ impl SimComponent for WatcherInterface {
                 {
                     Ok(_) => {
                         log::debug!("WatcherInterface Send mem req to watcher! {current_cycle}");
-                        busy = true;
+                        updated = true;
                     }
                     Err(mem_req) => {
                         self.private_cache_out_receiver.ret(mem_req);
@@ -217,10 +224,20 @@ impl SimComponent for WatcherInterface {
                 _ => unreachable!(),
             }
         }
-        busy |= self.watcher.update(shared_status, current_cycle);
-        busy |= self.clauses.update(shared_status, current_cycle);
-        busy |= self.private_cache.update(shared_status, current_cycle);
-        busy
+        // let (watcher_busy, watcher_updated) = self.watcher.update(shared_status, current_cycle);
+        // let (clause_busy, clause_updated) = self.clauses.update(shared_status, current_cycle);
+        // let (cache_busy, cache_updated) = self.private_cache.update(shared_status, current_cycle);
+        let (c_busy, c_update) = (
+            &mut self.watcher,
+            &mut self.clauses,
+            &mut self.private_cache,
+        )
+            .update(shared_status, current_cycle);
+        (busy || c_busy, updated || c_update)
+        // (
+        //     busy || watcher_busy || clause_busy || cache_busy,
+        //     updated || watcher_updated || clause_updated || cache_updated,
+        // )
     }
 }
 
@@ -259,6 +276,7 @@ mod test {
                 associativity: 2,
                 block_size: 4,
                 channels: 1,
+                alway_hit: false,
             },
             10,
             120,
@@ -313,6 +331,7 @@ mod test {
                 associativity: 2,
                 block_size: 4,
                 channels: 1,
+                alway_hit: false,
             },
             10,
             120,
@@ -372,6 +391,7 @@ mod test {
                 associativity: 2,
                 block_size: 4,
                 channels: 1,
+                alway_hit: false,
             },
             10,
             120,

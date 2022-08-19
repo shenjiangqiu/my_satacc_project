@@ -27,6 +27,9 @@ pub struct Watcher {
     watcher_pe_id: usize,
     mem_req_id_to_watcher_task: BTreeMap<usize, WatcherTask>,
     mem_req_id_to_clause_task: BTreeMap<usize, ClauseTask>,
+    total_ongoing_meta_mem_reqs: usize,
+    total_ongoing_data_mem_reqs: usize,
+    total_ongoing_private_cache_reqs: usize,
 }
 
 impl Watcher {
@@ -55,6 +58,9 @@ impl Watcher {
             watcher_pe_id,
             mem_req_id_to_watcher_task: BTreeMap::new(),
             mem_req_id_to_clause_task: BTreeMap::new(),
+            total_ongoing_meta_mem_reqs: 0,
+            total_ongoing_data_mem_reqs: 0,
+            total_ongoing_private_cache_reqs: 0,
         }
     }
 }
@@ -68,88 +74,123 @@ enum BusyReason {
 }
 impl SimComponent for Watcher {
     type SharedStatus = SataccStatus;
-    fn update(&mut self, context: &mut Self::SharedStatus, current_cycle: usize) -> bool {
+    fn update(&mut self, context: &mut Self::SharedStatus, current_cycle: usize) -> (bool, bool) {
         let mut busy = false;
+        let mut updated = false;
         let mut reason = BusyReason::NoTask;
         // first check the new arrived watcher tasks
-        if let Ok(watcher_task) = self.watcher_task_receiver.recv() {
-            log::debug!("Watcher Receive task! {current_cycle}");
-            // first read the watcher metadata
-            let mem_meta_task =
-                watcher_task.get_meta_data_task(self.total_watchers, context, self.watcher_pe_id);
-            let id = mem_meta_task.msg.id;
-            match self.cache_mem_icnt_sender.out_port.send(mem_meta_task) {
-                Ok(_) => {
-                    context.statistics.watcher_statistics[self.watcher_pe_id].total_assignments +=
-                        1;
-                    self.mem_req_id_to_watcher_task.insert(id, watcher_task);
-                    busy = true;
-                }
-                Err(_) => {
-                    // cannot send to cache now
-                    self.watcher_task_receiver.ret(watcher_task);
-                    reason = BusyReason::CannotSendL3Cache;
+        if self.total_ongoing_meta_mem_reqs < 256 && self.meta_finished_queue.len() < 256 {
+            if let Ok(watcher_task) = self.watcher_task_receiver.recv() {
+                busy = true;
+                // first read the watcher metadata
+                let mem_meta_task = watcher_task.get_meta_data_task(
+                    self.total_watchers,
+                    context,
+                    self.watcher_pe_id,
+                );
+                let id = mem_meta_task.msg.id;
+                match self.cache_mem_icnt_sender.out_port.send(mem_meta_task) {
+                    Ok(_) => {
+                        log::debug!("Watcher Receive task! {current_cycle}");
+
+                        context.statistics.watcher_statistics[self.watcher_pe_id]
+                            .total_assignments += 1;
+                        self.mem_req_id_to_watcher_task.insert(id, watcher_task);
+                        updated = true;
+                        self.total_ongoing_meta_mem_reqs += 1;
+                    }
+                    Err(_) => {
+                        // cannot send to cache now
+                        log::debug!("cannot meta data request send to cache now");
+                        self.watcher_task_receiver.ret(watcher_task);
+                        reason = BusyReason::CannotSendL3Cache;
+                    }
                 }
             }
         }
         // then check the tasks that finihed the meta data read
-        if let Some(watcher_task) = self.meta_finished_queue.pop_front() {
-            // start to read the watcher data!
-            let mem_watcher_task = watcher_task.get_watcher_data_task(
-                self.total_watchers,
-                context,
-                self.watcher_pe_id,
-            );
-            let id = mem_watcher_task.msg.id;
-            match self.cache_mem_icnt_sender.out_port.send(mem_watcher_task) {
-                Ok(_) => {
-                    self.mem_req_id_to_watcher_task.insert(id, watcher_task);
-                    busy = true;
-                }
-                Err(_mem_watcher_task) => {
-                    // cannot send to cache now
-                    self.meta_finished_queue.push_front(watcher_task);
-                    reason = BusyReason::CannotSendL3Cache;
+        if self.total_ongoing_data_mem_reqs < 256 && self.data_finished_queue.len() < 256 {
+            if let Some(watcher_task) = self.meta_finished_queue.pop_front() {
+                busy = true;
+                // start to read the watcher data!
+                let mem_watcher_task = watcher_task.get_watcher_data_task(
+                    self.total_watchers,
+                    context,
+                    self.watcher_pe_id,
+                );
+                let id = mem_watcher_task.msg.id;
+                match self.cache_mem_icnt_sender.out_port.send(mem_watcher_task) {
+                    Ok(_) => {
+                        updated = true;
+
+                        self.mem_req_id_to_watcher_task.insert(id, watcher_task);
+                        self.total_ongoing_data_mem_reqs += 1;
+                    }
+                    Err(_mem_watcher_task) => {
+                        // cannot send to cache now
+                        log::debug!("cannot send watcher data request send to cache now");
+                        self.meta_finished_queue.push_front(watcher_task);
+                        reason = BusyReason::CannotSendL3Cache;
+                    }
                 }
             }
         }
+
         // then check the tasks that finished the watcher list read
-        if let Some(watcher_task) = self.data_finished_queue.pop_front() {
-            busy = true;
-            // start to read the watcher data!
-            let signale_watcher_tasks = watcher_task.into_sub_single_watcher_task();
-            context.statistics.watcher_statistics[self.watcher_pe_id].total_watchers +=
-                signale_watcher_tasks.len();
-            self.single_watcher_task_queue.extend(signale_watcher_tasks);
+        if self.single_watcher_task_queue.len() < 256 {
+            if let Some(watcher_task) = self.data_finished_queue.pop_front() {
+                busy = true;
+                updated = true;
+                // start to read the watcher data!
+                let signale_watcher_tasks = watcher_task.into_sub_single_watcher_task();
+                context.statistics.watcher_statistics[self.watcher_pe_id].total_watchers +=
+                    signale_watcher_tasks.len();
+                self.single_watcher_task_queue.extend(signale_watcher_tasks);
+            }
         }
+
         // then process the single watcher tasks
-        if let Some(single_task) = self.single_watcher_task_queue.pop_front() {
-            let blocker_req = single_task.get_blocker_req(self.total_watchers, context);
-            let id = blocker_req.id;
-            match self.private_cache_sender.send(IcntMsgWrapper {
-                msg: blocker_req,
-                mem_target_port: 0,
-            }) {
-                Ok(_) => {
-                    busy = true;
-                    self.mem_req_id_to_clause_task.insert(id, single_task);
-                }
-                Err(_blocker_req) => {
-                    // cannot send to cache now
-                    self.single_watcher_task_queue.push_front(single_task);
-                    reason = BusyReason::CannotSendPrivateCache;
+        if self.total_ongoing_private_cache_reqs < 256
+            && self.single_watcher_value_finished_queue.len() < 256
+        {
+            if let Some(single_task) = self.single_watcher_task_queue.pop_front() {
+                let blocker_req = single_task.get_blocker_req(self.total_watchers, context);
+                let id = blocker_req.id;
+                busy = true;
+                match self.private_cache_sender.send(IcntMsgWrapper {
+                    msg: blocker_req,
+                    mem_target_port: 0,
+                }) {
+                    Ok(_) => {
+                        updated = true;
+
+                        self.mem_req_id_to_clause_task.insert(id, single_task);
+                        self.total_ongoing_private_cache_reqs += 1;
+                    }
+                    Err(_blocker_req) => {
+                        // cannot send to cache now
+                        log::debug!("cannot send blocker request send to cache now");
+                        self.single_watcher_task_queue.push_front(single_task);
+                        reason = BusyReason::CannotSendPrivateCache;
+                    }
                 }
             }
         }
 
         // update current processing task
-        if let Some((finished_cycle, single_task)) = self.current_processing_task.take() {
-            busy = true;
-            if finished_cycle > current_cycle {
-                self.current_processing_task = Some((finished_cycle, single_task));
-            } else {
-                self.single_watcher_process_finished_queue
-                    .push_back(single_task);
+        if self.single_watcher_process_finished_queue.len() < 256 {
+            if let Some((finished_cycle, single_task)) = self.current_processing_task.take() {
+                // currently processing task, so busy is true
+                busy = true;
+                updated = true;
+
+                if finished_cycle > current_cycle {
+                    // not finished yet
+                    self.current_processing_task = Some((finished_cycle, single_task));
+                } else {
+                    self.single_watcher_process_finished_queue
+                        .push_back(single_task);
+                }
             }
         }
 
@@ -157,6 +198,7 @@ impl SimComponent for Watcher {
         if self.current_processing_task.is_none() {
             if let Some(single_task) = self.single_watcher_value_finished_queue.pop_front() {
                 busy = true;
+                updated = true;
                 // a watcher need 2 cycle to test if it's time to read the clause
                 let process_time = 2;
                 self.current_processing_task = Some((current_cycle + process_time, single_task));
@@ -165,6 +207,7 @@ impl SimComponent for Watcher {
 
         // then send the task to clause unit
         if let Some(single_task) = self.single_watcher_process_finished_queue.pop_front() {
+            busy = true;
             // only send to the clause unit when it has to.
             if single_task.have_to_read_clause() {
                 match self
@@ -172,12 +215,13 @@ impl SimComponent for Watcher {
                     .send(single_task.into_push_clause_req(self.total_watchers))
                 {
                     Ok(_) => {
-                        busy = true;
+                        updated = true;
                         context.statistics.watcher_statistics[self.watcher_pe_id]
                             .total_clauses_sent += 1;
                     }
                     Err(clause_task) => {
                         // cannot send to cache now
+                        log::debug!("cannot send clause to clause unit now");
                         let clause_task = clause_task.msg;
                         self.single_watcher_process_finished_queue
                             .push_front(clause_task);
@@ -188,23 +232,29 @@ impl SimComponent for Watcher {
         }
 
         // get the global memory return
+
         if let Ok(mem_req) = self.cache_mem_icnt_sender.in_port.recv() {
             busy = true;
-            log::debug!("Watcher Receive mem_req! {current_cycle}");
             match mem_req.msg.req_type {
                 MemReqType::WatcherReadMetaData => {
+                    updated = true;
+                    log::debug!("Watcher Receive mem_req! {current_cycle}");
                     self.meta_finished_queue.push_back(
                         self.mem_req_id_to_watcher_task
                             .remove(&mem_req.msg.id)
                             .unwrap(),
                     );
+                    self.total_ongoing_meta_mem_reqs -= 1;
                 }
                 MemReqType::WatcherReadData => {
+                    updated = true;
+                    log::debug!("Watcher Receive mem_req! {current_cycle}");
                     self.data_finished_queue.push_back(
                         self.mem_req_id_to_watcher_task
                             .remove(&mem_req.msg.id)
                             .unwrap(),
                     );
+                    self.total_ongoing_data_mem_reqs -= 1;
                 }
 
                 _ => unreachable!(),
@@ -212,8 +262,10 @@ impl SimComponent for Watcher {
         }
         // get the private cache return
         if let Ok(mem_req) = self.private_cache_receiver.recv() {
-            log::debug!("Watcher Receive mem_req! {current_cycle}");
+            log::debug!("Watcher Receive mem_req private! {current_cycle}");
+            self.total_ongoing_private_cache_reqs -= 1;
             busy = true;
+            updated = true;
             match mem_req.msg.req_type {
                 MemReqType::WatcherReadBlocker => {
                     self.single_watcher_value_finished_queue.push_back(
@@ -225,7 +277,8 @@ impl SimComponent for Watcher {
                 _ => unreachable!(),
             }
         }
-        match busy {
+
+        match updated {
             true => {
                 context.statistics.watcher_statistics[self.watcher_pe_id].busy_cycle += 1;
             }
@@ -271,7 +324,7 @@ impl SimComponent for Watcher {
                 }
             }
         }
-        busy
+        (busy, updated)
     }
 }
 

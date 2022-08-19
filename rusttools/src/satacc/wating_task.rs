@@ -39,6 +39,9 @@ impl<T> WaitingTask<T> {
             data: BinaryHeap::new(),
         }
     }
+    pub fn len(&self) -> usize {
+        self.data.len()
+    }
     pub fn push(&mut self, task: T, leaving_cycle: usize) {
         self.data.push(Reverse(WaitingTaskData {
             task,

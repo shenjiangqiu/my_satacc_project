@@ -1,5 +1,7 @@
 use std::ops::Add;
 pub mod config;
+#[macro_use]
+pub(self) mod macros;
 pub mod satacc;
 pub mod sim;
 pub(self) mod test_utils;

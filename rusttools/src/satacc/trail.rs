@@ -26,18 +26,25 @@ impl Trail {
 
 impl SimComponent for Trail {
     type SharedStatus = super::SataccStatus;
-    fn update(&mut self, shared_status: &mut Self::SharedStatus, _current_cycle: usize) -> bool {
+    fn update(
+        &mut self,
+        shared_status: &mut Self::SharedStatus,
+        _current_cycle: usize,
+    ) -> (bool, bool) {
         let mut busy = self.current_working_task.is_some();
+        let mut updated = false;
         // update current running task
         if let Some(current_task) = self.current_working_task.as_mut() {
             if let Some(watcher_task) = current_task.pop_next_task() {
                 let watcher_unit_id = watcher_task.get_watcher_pe_id(self.total_watcher);
                 match self.watcher_sender[watcher_unit_id].send(watcher_task) {
                     Ok(_) => {
+                        updated = true;
                         busy = true;
                     }
                     Err(watcher_task) => {
                         current_task.ret_task(watcher_task);
+                        log::debug!("send task to watcher {} failed", watcher_unit_id);
                     }
                 }
             } else {
@@ -52,8 +59,9 @@ impl SimComponent for Trail {
                 shared_status.update_single_round_task(&single_round_task);
                 self.current_working_task = Some(single_round_task);
                 busy = true;
+                updated = true;
             }
         }
-        busy
+        (busy, updated)
     }
 }

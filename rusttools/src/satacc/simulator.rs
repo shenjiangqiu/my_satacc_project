@@ -48,7 +48,11 @@ pub struct TrailAndOthers {
 impl SimComponent for TrailAndOthers {
     type SharedStatus = SataccStatus;
 
-    fn update(&mut self, shared_status: &mut Self::SharedStatus, current_cycle: usize) -> bool {
+    fn update(
+        &mut self,
+        shared_status: &mut Self::SharedStatus,
+        current_cycle: usize,
+    ) -> (bool, bool) {
         match self.current_running_mode {
             RunMode::NoGapBtweenRounds => {
                 let trail_busy = self.trail.update(shared_status, current_cycle);
@@ -56,8 +60,11 @@ impl SimComponent for TrailAndOthers {
                 trail_busy
             }
             RunMode::RealRoundGap => {
-                self.trail.update(shared_status, current_cycle)
-                    || self.others.update(shared_status, current_cycle)
+                // let (trail_busy, trail_updated) = self.trail.update(shared_status, current_cycle);
+                // let (others_busy, others_updated) =
+                //     self.others.update(shared_status, current_cycle);
+                // (trail_busy || others_busy, trail_updated || others_updated)
+                (&mut self.trail, &mut self.others).update(shared_status, current_cycle)
             }
         }
     }
@@ -73,6 +80,7 @@ impl Simulator {
     pub fn new_from_config(config: Config) -> Self {
         Self { config }
     }
+
     /// get the simulator
     #[no_mangle]
     pub extern "C" fn get_simulator() -> *mut SimulatorWapper {
@@ -169,6 +177,7 @@ impl Simulator {
         serde_json::to_writer_pretty(File::create("cycle.json").unwrap(), &cycle).unwrap();
     }
     pub fn build(&self, init_runing_mode: RunMode) -> (SimSender<SingleRoundTask>, TrailAndOthers) {
+        log::info!("build simulator with mode: {init_runing_mode:?}");
         let channel_builder = ChannelBuilder::new();
 
         // build the trail
@@ -312,12 +321,14 @@ mod test {
                 associativity: 2,
                 block_size: 64,
                 channels: 1,
+                alway_hit: false,
             },
             l3_cache_config: CacheConfig {
                 sets: 16,
                 associativity: 2,
                 block_size: 64,
                 channels: 8,
+                alway_hit: false,
             },
             l1_hit_latency: 1,
             l3_hit_latency: 15,

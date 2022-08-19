@@ -43,56 +43,66 @@ impl CacheWithFixTime {
 
 impl SimComponent for CacheWithFixTime {
     type SharedStatus = SataccStatus;
-    fn update(&mut self, shared_status: &mut Self::SharedStatus, current_cycle: usize) -> bool {
+    fn update(
+        &mut self,
+        shared_status: &mut Self::SharedStatus,
+        current_cycle: usize,
+    ) -> (bool, bool) {
         let mut busy = !self.on_going_reqs.is_empty();
+        let mut updated = false;
         // first check if there is any request in the in_req_queues, if find, access it
         for InOutPort {
             in_port,
             out_port: _,
         } in &mut self.req_ports
         {
-            if let Ok(IcntMsgWrapper {
-                msg,
-                mem_target_port: _,
-            }) = in_port.recv()
-            {
-                match self.fast_cache.access(msg.addr) {
-                    AccessResult::Hit(tag) => {
-                        // if it's hit, if the tag is in the tag_to_reqs, means it's already in on_going_reqs, just add this req to tag_to_reqs
-                        // if the tag is not in the tag_to_reqs, means it's not in on_going_reqs, add it to on_going_reqs and tag_to_reqs
-                        shared_status.statistics.update_hit(&self.cache_id);
-                        match self.tag_to_reqs.get_mut(&tag) {
-                            Some(entry) => {
-                                entry.push(msg);
+            if self.on_going_reqs.len() < 1024 {
+                if let Ok(IcntMsgWrapper {
+                    msg,
+                    mem_target_port: _,
+                }) = in_port.recv()
+                {
+                    match self.fast_cache.access(msg.addr) {
+                        AccessResult::Hit(tag) => {
+                            // if it's hit, if the tag is in the tag_to_reqs, means it's already in on_going_reqs, just add this req to tag_to_reqs
+                            // if the tag is not in the tag_to_reqs, means it's not in on_going_reqs, add it to on_going_reqs and tag_to_reqs
+                            shared_status.statistics.update_hit(&self.cache_id);
+                            match self.tag_to_reqs.get_mut(&tag) {
+                                Some(entry) => {
+                                    entry.push(msg);
+                                }
+                                None => {
+                                    // no tag in record, add it!
+                                    // the latency will be hit_latency
+                                    self.on_going_reqs
+                                        .push(tag, current_cycle + self.hit_latency);
+                                    self.tag_to_reqs.insert(tag, vec![msg]);
+                                }
                             }
-                            None => {
-                                // no tag in record, add it!
-                                // the latency will be hit_latency
-                                self.on_going_reqs
-                                    .push(tag, current_cycle + self.hit_latency);
-                                self.tag_to_reqs.insert(tag, vec![msg]);
+                        }
+                        AccessResult::Miss(tag) => {
+                            shared_status.statistics.update_miss(&self.cache_id);
+                            match self.tag_to_reqs.get_mut(&tag) {
+                                Some(entry) => {
+                                    entry.push(msg);
+                                }
+                                None => {
+                                    self.on_going_reqs
+                                        .push(tag, current_cycle + self.miss_latency);
+                                    self.tag_to_reqs.insert(tag, vec![msg]);
+                                }
                             }
                         }
                     }
-                    AccessResult::Miss(tag) => {
-                        shared_status.statistics.update_miss(&self.cache_id);
-                        match self.tag_to_reqs.get_mut(&tag) {
-                            Some(entry) => {
-                                entry.push(msg);
-                            }
-                            None => {
-                                self.on_going_reqs
-                                    .push(tag, current_cycle + self.miss_latency);
-                                self.tag_to_reqs.insert(tag, vec![msg]);
-                            }
-                        }
-                    }
+                    busy = true;
+                    updated = true;
                 }
-                busy = true;
             }
         }
         // then check if there is any request in the on_going_reqs
         while let Some((leaving_cycle, tag)) = self.on_going_reqs.pop() {
+            busy = true;
+            updated = true;
             if leaving_cycle > current_cycle {
                 self.on_going_reqs.push(tag, leaving_cycle);
                 break;
@@ -104,6 +114,7 @@ impl SimComponent for CacheWithFixTime {
         // then push ready queue to out
 
         while let Some(req) = self.ready_reqs.pop_front() {
+            busy = true;
             log::debug!("send req: {:?} at cycle: {current_cycle}", req);
             let out_id = req.mem_id;
             let wathcer_id = req.watcher_pe_id;
@@ -113,7 +124,7 @@ impl SimComponent for CacheWithFixTime {
             };
             match self.req_ports[out_id].out_port.send(req) {
                 Ok(_) => {
-                    busy = true;
+                    updated = true;
                 }
                 Err(e) => {
                     // cannot send to cache now
@@ -123,7 +134,7 @@ impl SimComponent for CacheWithFixTime {
             }
         }
 
-        busy
+        (busy, updated)
     }
 }
 
@@ -148,6 +159,7 @@ mod test {
                 associativity: 2,
                 block_size: 4,
                 channels: 1,
+                alway_hit: false,
             }),
 
             on_going_reqs: WaitingTask::new(),

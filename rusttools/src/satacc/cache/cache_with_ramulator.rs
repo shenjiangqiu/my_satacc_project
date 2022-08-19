@@ -50,12 +50,19 @@ impl CacheWithRamulator {
 
 impl SimComponent for CacheWithRamulator {
     type SharedStatus = SataccStatus;
-    fn update(&mut self, shared_status: &mut Self::SharedStatus, current_cycle: usize) -> bool {
+    fn update(
+        &mut self,
+        shared_status: &mut Self::SharedStatus,
+        current_cycle: usize,
+    ) -> (bool, bool) {
         let mut busy = !self.on_going_reqs.is_empty() || !self.on_dram_reqs.is_empty();
+        let mut updated = !self.on_dram_reqs.is_empty();
         // first check if there is any request in the in_req_queues
         if let Some(req) = self.temp_send_blocked_req.take() {
+            busy = true;
             // if temp_send_blocked_req have value, first process it!
             if self.ramulator.available(req.addr, req.is_write) {
+                updated = true;
                 log::debug!("send blocked req to dram");
                 let tag = get_set_number_from_addr(
                     req.addr,
@@ -82,6 +89,8 @@ impl SimComponent for CacheWithRamulator {
                     msg,
                 }) = in_port.recv()
                 {
+                    busy = true;
+                    updated = true;
                     log::debug!("recv req: {:?} at cycle: {current_cycle}", msg);
                     match self.fast_cache.access(msg.addr) {
                         AccessResult::Hit(tag) => {
@@ -121,12 +130,13 @@ impl SimComponent for CacheWithRamulator {
                             }
                         }
                     }
-                    busy = true;
                 }
             }
         }
         // then check if there is any request in the on_going_reqs
         while let Some((leaving_cycle, req)) = self.on_going_reqs.pop() {
+            busy = true;
+            updated = true;
             if leaving_cycle > current_cycle {
                 // cannot send it now
                 self.on_going_reqs.push(req, leaving_cycle);
@@ -153,6 +163,8 @@ impl SimComponent for CacheWithRamulator {
 
         // no temp blocked, check the dram reqs
         while self.ramulator.ret_available() {
+            busy = true;
+            updated = true;
             let tag = self.ramulator.pop();
             log::debug!("dram req: {:?} at cycle: {}", tag, current_cycle);
             match self.on_dram_reqs.remove(&tag) {
@@ -173,7 +185,7 @@ impl SimComponent for CacheWithRamulator {
             }
         }
         self.ramulator.cycle();
-        busy
+        (busy, updated)
     }
 }
 
@@ -198,6 +210,7 @@ mod test {
                 associativity: 2,
                 block_size: 4,
                 channels: 1,
+                alway_hit: false,
             }),
             ramulator: RamulatorWrapper::new_with_preset(PresetConfigs::HBM, "STAT.txt"),
             on_going_reqs: WaitingTask::new(),

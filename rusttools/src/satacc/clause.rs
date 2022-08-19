@@ -25,6 +25,8 @@ pub struct ClauseUnit {
     current_reading_value_task: Option<ClauseValueTracker>,
 
     mem_req_id_to_clause_task: BTreeMap<usize, ClauseTask>,
+    total_clause_data_mem_ongoing: usize,
+    total_private_mem_ongoing: usize,
 }
 enum BusyReason {
     NoTask,
@@ -33,6 +35,7 @@ enum BusyReason {
     SendingL1,
     SendingL3,
 }
+
 impl ClauseUnit {
     pub fn new(
         clause_task_in: SimReciver<IcntMsgWrapper<ClauseTask>>,
@@ -54,45 +57,63 @@ impl ClauseUnit {
             clause_pe_id,
             current_reading_value_task: None,
             mem_req_id_to_clause_task: BTreeMap::new(),
+            total_clause_data_mem_ongoing: 0,
+            total_private_mem_ongoing: 0,
         }
     }
 }
 
 impl SimComponent for ClauseUnit {
     type SharedStatus = SataccStatus;
-    fn update(&mut self, context: &mut Self::SharedStatus, current_cycle: usize) -> bool {
+    /// ClauseUnit is a component that is responsible for sending data to the
+    fn update(&mut self, context: &mut Self::SharedStatus, current_cycle: usize) -> (bool, bool) {
         let mut busy = self.current_processing_task.is_some();
+        let mut updated = false;
+        // the reason for not updated
+        let mut idle_reason = BusyReason::NoTask;
         // first read the clause data
-        let mut busy_reason = BusyReason::NoTask;
-        if let Ok(task) = self.clause_task_in.recv() {
-            log::debug!("ClauseUnit Receive task! {current_cycle}");
-            let mem_req = task.msg.get_clause_data_task(
-                context,
-                self.watcher_pe_id,
-                self.clause_pe_id,
-                self.total_watchers,
-            );
-            let id = mem_req.msg.id;
-            match self.mem_icnt_port.out_port.send(mem_req) {
-                Ok(_) => {
-                    self.mem_req_id_to_clause_task.insert(id, task.msg);
-                    context.statistics.clause_statistics[self.watcher_pe_id].single_clause
-                        [self.clause_pe_id]
-                        .total_clause_received += 1;
-                    busy = true;
-                }
-                Err(_e) => {
-                    // cannot send to cache now
-                    // just ret the task so we don't need the target port
-                    self.clause_task_in.ret(task);
-                    busy_reason = BusyReason::SendingL3;
+        if self.total_clause_data_mem_ongoing < 256 && self.clause_data_ready_queue.len() < 256 {
+            if let Ok(task) = self.clause_task_in.recv() {
+                busy = true;
+
+                let mem_req = task.msg.get_clause_data_task(
+                    context,
+                    self.watcher_pe_id,
+                    self.clause_pe_id,
+                    self.total_watchers,
+                );
+                let id = mem_req.msg.id;
+                match self.mem_icnt_port.out_port.send(mem_req) {
+                    Ok(_) => {
+                        log::debug!("ClauseUnit Receive task! {current_cycle}");
+
+                        self.mem_req_id_to_clause_task.insert(id, task.msg);
+                        context.statistics.clause_statistics[self.watcher_pe_id].single_clause
+                            [self.clause_pe_id]
+                            .total_clause_received += 1;
+                        updated = true;
+                        self.total_clause_data_mem_ongoing += 1;
+                    }
+                    Err(_e) => {
+                        // cannot send to cache now
+                        // just ret the task so we don't need the target port
+                        log::debug!(
+                            "ClauseUnit Receive task! bug cannot send to mem {current_cycle}"
+                        );
+                        self.clause_task_in.ret(task);
+                        idle_reason = BusyReason::SendingL3;
+                    }
                 }
             }
+        } else {
+            log::debug!("ClauseUnit cannot Receive task! {current_cycle}, total_clause_data_mem_ongoing: {},clause_data_ready_queue:len: {}",self.total_clause_data_mem_ongoing,self.clause_data_ready_queue.len());
         }
+
         // try get a task to start to read the clause value
         if self.current_reading_value_task.is_none() {
             if let Some(task) = self.clause_data_ready_queue.pop_front() {
                 busy = true;
+                updated = true;
                 let mem_req =
                     task.get_read_clause_value_task(context, self.watcher_pe_id, self.clause_pe_id);
                 context.statistics.clause_statistics[self.watcher_pe_id].single_clause
@@ -106,27 +127,41 @@ impl SimComponent for ClauseUnit {
             }
         }
         // process the clause value task
-        if let Some(reqs) = self.current_reading_value_task.as_mut() {
-            if let Some(req) = reqs.waiting_to_send_reqs.pop_front() {
-                let id = req.msg.id;
-                match self.private_cache_port.out_port.send(req) {
-                    Ok(_) => {
-                        busy = true;
-                        reqs.unfinished_req_id.insert(id);
-                    }
-                    Err(e) => {
-                        // cannot send to cache now
-                        // just ret the task so we don't need the target port
-                        reqs.waiting_to_send_reqs.push_front(e);
-                        busy_reason = BusyReason::SendingL1;
+        if self.total_private_mem_ongoing < 256 && self.clause_value_ready_queue.len() < 256 {
+            if let Some(reqs) = self.current_reading_value_task.as_mut() {
+                if let Some(req) = reqs.waiting_to_send_reqs.pop_front() {
+                    busy = true;
+                    let id = req.msg.id;
+                    match self.private_cache_port.out_port.send(req) {
+                        Ok(_) => {
+                            updated = true;
+                            reqs.unfinished_req_id.insert(id);
+                            self.total_private_mem_ongoing += 1;
+                        }
+                        Err(e) => {
+                            // cannot send to cache now
+                            // just ret the task so we don't need the target port
+                            log::debug!("ClauseUnit cannot send read value to mem {current_cycle}");
+                            reqs.waiting_to_send_reqs.push_front(e);
+                            idle_reason = BusyReason::SendingL1;
+                        }
                     }
                 }
             }
+        } else {
+            log::debug!(
+                "ClauseUnit cannot send read value to private cache {current_cycle},\
+                total_private_mem_ongoing: {},\
+                clause_value_ready_queue:len: {}",
+                self.total_private_mem_ongoing,
+                self.clause_value_ready_queue.len()
+            );
         }
 
         // then update current process task
         if let Some((finished_cycle, task)) = self.current_processing_task.take() {
             busy = true;
+            updated = true;
             if finished_cycle >= current_cycle {
                 self.current_processing_task = Some((finished_cycle, task));
             } else {
@@ -139,11 +174,13 @@ impl SimComponent for ClauseUnit {
             if let Some(task) = self.clause_value_ready_queue.pop_front() {
                 let process_time = task.get_process_time();
                 busy = true;
+                updated = true;
                 self.current_processing_task = Some((current_cycle + process_time, task));
             }
         }
         // process memory ret
         if let Ok(mem_req) = self.mem_icnt_port.in_port.recv() {
+            self.total_clause_data_mem_ongoing -= 1;
             log::debug!("ClauseUnit Receive mem_req! {current_cycle}");
             match mem_req.msg.req_type {
                 crate::satacc::MemReqType::ClauseReadData(_) => {
@@ -157,10 +194,13 @@ impl SimComponent for ClauseUnit {
                 _ => unreachable!(),
             }
             busy = true;
+            updated = true;
         }
+
         // process private cache ret
         if let Ok(mem_req) = self.private_cache_port.in_port.recv() {
             log::debug!("ClauseUnit Receive mem_req from private cache! {current_cycle}");
+            self.total_private_mem_ongoing -= 1;
             match mem_req.msg.req_type {
                 MemReqType::ClauseReadValue(_clause_id) => {
                     let current_waiting = self.current_reading_value_task.as_mut().unwrap();
@@ -174,8 +214,10 @@ impl SimComponent for ClauseUnit {
                 _ => unreachable!(),
             }
             busy = true;
+            updated = true;
         }
-        match busy {
+
+        match updated {
             true => {
                 context.statistics.clause_statistics[self.watcher_pe_id].single_clause
                     [self.clause_pe_id]
@@ -187,18 +229,18 @@ impl SimComponent for ClauseUnit {
                     .idle_cycle += 1;
                 // some l3 req in flight
                 if !self.mem_req_id_to_clause_task.is_empty() {
-                    busy_reason = BusyReason::WaitingL3;
+                    idle_reason = BusyReason::WaitingL3;
                 }
                 // some private cache inflight
                 if let Some(tracker) = &self.current_reading_value_task {
                     if !tracker.unfinished_req_id.is_empty() {
-                        busy_reason = BusyReason::WaitingL1;
+                        idle_reason = BusyReason::WaitingL1;
                     }
                 }
                 let idle_stat = &mut context.statistics.clause_statistics[self.watcher_pe_id]
                     .single_clause[self.clause_pe_id]
                     .idle_stat;
-                match busy_reason {
+                match idle_reason {
                     BusyReason::NoTask => idle_stat.idle_no_task += 1,
                     BusyReason::WaitingL1 => idle_stat.idle_wating_l1 += 1,
                     BusyReason::WaitingL3 => idle_stat.idle_wating_l3 += 1,
@@ -207,7 +249,7 @@ impl SimComponent for ClauseUnit {
                 }
             }
         }
-        busy
+        (busy, updated)
     }
 }
 #[cfg(test)]
