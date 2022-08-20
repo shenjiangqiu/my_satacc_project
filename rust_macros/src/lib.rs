@@ -1,5 +1,3 @@
-use syn::parse_macro_input;
-
 #[cfg(test)]
 mod tests {
     #[test]

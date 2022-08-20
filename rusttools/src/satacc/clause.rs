@@ -28,7 +28,8 @@ pub struct ClauseUnit {
     total_clause_data_mem_ongoing: usize,
     total_private_mem_ongoing: usize,
 }
-enum BusyReason {
+#[derive(Debug)]
+enum IdleReason {
     NoTask,
     WaitingL1,
     WaitingL3,
@@ -70,7 +71,7 @@ impl SimComponent for ClauseUnit {
         let mut busy = self.current_processing_task.is_some();
         let mut updated = false;
         // the reason for not updated
-        let mut idle_reason = BusyReason::NoTask;
+        let mut idle_reason = IdleReason::NoTask;
         // first read the clause data
         if self.total_clause_data_mem_ongoing < 256 && self.clause_data_ready_queue.len() < 256 {
             if let Ok(task) = self.clause_task_in.recv() {
@@ -101,7 +102,7 @@ impl SimComponent for ClauseUnit {
                             "ClauseUnit Receive task! bug cannot send to mem {current_cycle}"
                         );
                         self.clause_task_in.ret(task);
-                        idle_reason = BusyReason::SendingL3;
+                        idle_reason = IdleReason::SendingL3;
                     }
                 }
             }
@@ -143,7 +144,7 @@ impl SimComponent for ClauseUnit {
                             // just ret the task so we don't need the target port
                             log::debug!("ClauseUnit cannot send read value to mem {current_cycle}");
                             reqs.waiting_to_send_reqs.push_front(e);
-                            idle_reason = BusyReason::SendingL1;
+                            idle_reason = IdleReason::SendingL1;
                         }
                     }
                 }
@@ -229,25 +230,30 @@ impl SimComponent for ClauseUnit {
                     .idle_cycle += 1;
                 // some l3 req in flight
                 if !self.mem_req_id_to_clause_task.is_empty() {
-                    idle_reason = BusyReason::WaitingL3;
+                    idle_reason = IdleReason::WaitingL3;
                 }
                 // some private cache inflight
                 if let Some(tracker) = &self.current_reading_value_task {
                     if !tracker.unfinished_req_id.is_empty() {
-                        idle_reason = BusyReason::WaitingL1;
+                        idle_reason = IdleReason::WaitingL1;
                     }
                 }
                 let idle_stat = &mut context.statistics.clause_statistics[self.watcher_pe_id]
                     .single_clause[self.clause_pe_id]
                     .idle_stat;
                 match idle_reason {
-                    BusyReason::NoTask => idle_stat.idle_no_task += 1,
-                    BusyReason::WaitingL1 => idle_stat.idle_wating_l1 += 1,
-                    BusyReason::WaitingL3 => idle_stat.idle_wating_l3 += 1,
-                    BusyReason::SendingL1 => idle_stat.idle_send_l1 += 1,
-                    BusyReason::SendingL3 => idle_stat.idle_send_l3 += 1,
+                    IdleReason::NoTask => idle_stat.idle_no_task += 1,
+                    IdleReason::WaitingL1 => idle_stat.idle_wating_l1 += 1,
+                    IdleReason::WaitingL3 => idle_stat.idle_wating_l3 += 1,
+                    IdleReason::SendingL1 => idle_stat.idle_send_l1 += 1,
+                    IdleReason::SendingL3 => idle_stat.idle_send_l3 += 1,
                 }
             }
+        }
+        if busy && !updated {
+            log::debug!(
+                "ClauseUnit is busy! but not updated {current_cycle}, idle_reason: {idle_reason:?}",
+            );
         }
         (busy, updated)
     }
@@ -299,11 +305,11 @@ mod test {
                 mem_target_port: 0,
             })
             .unwrap();
-        sim_runner.run();
+        sim_runner.run().unwrap();
         let req = mem_icnt_port_pair.1.in_port.recv().unwrap();
         log::debug!("should be read data: {:?}", req);
         mem_icnt_port_pair.1.out_port.send(req).unwrap();
-        sim_runner.run();
+        sim_runner.run().unwrap();
         // now private cache should receive 3 requests
         let req1 = private_cache_port_pair.1.in_port.recv().unwrap();
         let req2 = private_cache_port_pair.1.in_port.recv().unwrap();
@@ -313,7 +319,7 @@ mod test {
         private_cache_port_pair.1.out_port.send(req2).unwrap();
         private_cache_port_pair.1.out_port.send(req3).unwrap();
 
-        sim_runner.run();
+        sim_runner.run().unwrap();
         // now clause unit should receive 3 requests and finished the process
     }
 }

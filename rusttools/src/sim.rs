@@ -131,7 +131,7 @@ where
     pub fn get_shared_status_mut(&mut self) -> &mut S {
         &mut self.shared_status
     }
-    pub fn run(&mut self) {
+    pub fn run(&mut self) -> eyre::Result<()> {
         loop {
             let result = self.sim.update(&mut self.shared_status, self.current_cycle);
             match result {
@@ -143,10 +143,10 @@ where
                         "simulation is busy but not updated at cycle {}",
                         self.current_cycle
                     );
-                    panic!(
+                    return Err(eyre::eyre!(
                         "simulation is busy but not updated at cycle {}",
                         self.current_cycle
-                    );
+                    ));
                 }
                 (false, _) => {
                     // not busy, so we are done
@@ -155,6 +155,7 @@ where
             }
             self.current_cycle += 1;
         }
+        Ok(())
     }
     pub fn get_current_cycle(&self) -> usize {
         self.current_cycle
@@ -384,7 +385,7 @@ mod test {
         let sim = task_sender.connect(task_receiver);
 
         let mut sim_runner = SimRunner::new(sim, ());
-        sim_runner.run();
+        sim_runner.run().unwrap();
     }
     #[test]
     fn sim_test_box() {
@@ -401,7 +402,7 @@ mod test {
         let sim = task_sender.connect(task_receiver);
 
         let mut sim_runner = SimRunner::new(sim, ());
-        sim_runner.run();
+        sim_runner.run().unwrap();
     }
 
     #[test]

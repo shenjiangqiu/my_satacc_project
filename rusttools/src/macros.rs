@@ -42,15 +42,15 @@ macro_rules! impl_for_one_tuple_with_type {
         impl<TypeOfTrait,$($i:$id1<$id3=TypeOfTrait>,)*> $id1 for ($($i,)*) {
             type $id3 = TypeOfTrait;
             fn $id2(&mut self,status:&mut Self::$id3,cycle:usize) -> (bool,bool) {
-                let mut temp_busy=false;
-                let mut temp_updated=false;
+                let mut busy=false;
+                let mut updated=false;
                 let ( $(ref mut $i,)*) = *self;
                 $(
-                    let (busy,updated) = $i.$id2(status,cycle);
-                    temp_busy = temp_busy || busy;
-                    temp_updated = temp_updated || updated;
+                    let (tbusy,tupdated) = $i.$id2(status,cycle);
+                    busy = busy || tbusy;
+                    updated = updated || tupdated;
                 )*
-                (temp_busy,temp_updated)
+                (busy,updated)
             }
         }
     };

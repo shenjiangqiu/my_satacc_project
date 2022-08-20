@@ -133,7 +133,9 @@ impl SimComponent for CacheWithFixTime {
                 }
             }
         }
-
+        if busy && !updated {
+            log::error!("cache is busy but no update");
+        }
         (busy, updated)
     }
 }
@@ -190,6 +192,6 @@ mod test {
         }
 
         let mut sim_runner = SimRunner::new(cache, status);
-        sim_runner.run();
+        sim_runner.run().unwrap();
     }
 }

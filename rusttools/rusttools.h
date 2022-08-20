@@ -49,6 +49,11 @@ enum class PresetConfigs {
   WideIO,
 };
 
+enum class RunMode {
+  NoGapBtweenRounds,
+  RealRoundGap,
+};
+
 /// The type for the watcher sending to the clase
 enum class WatcherToClauseType {
   /// - in this case, the watcher send clause to it's own clause unit
@@ -71,6 +76,7 @@ struct CacheConfig {
   uint64_t associativity;
   uint64_t block_size;
   uint64_t channels;
+  bool alway_hit;
 };
 
 /// the config for satacc
@@ -83,6 +89,7 @@ struct Config {
   size_t mems;
   IcntType icnt;
   bool seq;
+  bool ideal_icnt;
   bool ideal_memory;
   bool ideal_l3cache;
   size_t multi_port;
@@ -97,8 +104,10 @@ struct Config {
   size_t channel_size;
   CacheType l3_cache_type;
   PresetConfigs ramu_cache_config;
-  size_t hit_latency;
+  size_t l1_hit_latency;
+  size_t l3_hit_latency;
   size_t miss_latency;
+  RunMode init_running_mode;
   CacheConfig private_cache_config;
   CacheConfig l3_cache_config;
 };
@@ -142,7 +151,8 @@ Config config_from_file(const char *path);
 SataccMinisatTask *create_empty_task();
 
 /// finish the simulation, this will consume the simulator
-void finish_simulator(SataccMinisatTask *task, SimulatorWapper *sim);
+/// return still ok?
+bool finish_simulator(SataccMinisatTask *task, SimulatorWapper *sim);
 
 /// get the simulator
 SimulatorWapper *get_simulator();
@@ -152,11 +162,12 @@ int32_t get_x(const Point *self);
 int32_t get_y(const Point *self);
 
 /// run full simulation and will delete the task, do not use the task anymore!
-void run_full_expr(SataccMinisatTask *task);
+bool run_full_expr(SataccMinisatTask *task);
 
 /// run a single round of simulation,
 /// this will not consume any point, you can use it later
-void run_single_task(SataccMinisatTask *task, SimulatorWapper *sim);
+/// return still ok?
+bool run_single_task(SataccMinisatTask *task, SimulatorWapper *sim);
 
 void say_hello(const Point *point, const Rec *rect);
 

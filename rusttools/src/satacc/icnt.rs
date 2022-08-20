@@ -11,10 +11,11 @@ pub struct SimpleIcnt<T> {
     pub ports: Vec<InOutPort<T>>,
     in_transit_messages: WaitingTask<T>,
     row_size: usize,
+    ideal_icnt: bool,
 }
 
 impl<T> SimpleIcnt<T> {
-    pub fn new(ports: Vec<InOutPort<T>>) -> Self {
+    pub fn new(ports: Vec<InOutPort<T>>, ideal_icnt: bool) -> Self {
         let num_ports = ports.len();
         let ports_sqrt = (num_ports as f64).sqrt().floor() as usize;
         let ports_sqrt = if ports_sqrt == 0 { 1 } else { ports_sqrt };
@@ -23,12 +24,14 @@ impl<T> SimpleIcnt<T> {
             ports,
             in_transit_messages: WaitingTask::new(),
             row_size: ports_sqrt,
+            ideal_icnt,
         }
     }
     pub fn new_with_config(
         n_ports: usize,
         channel_size: usize,
         channel_builder: &ChannelBuilder,
+        ideal_icnt: bool,
     ) -> (Self, Vec<InOutPort<T>>) {
         let ports = (0..n_ports)
             .map(|_| {
@@ -54,7 +57,7 @@ impl<T> SimpleIcnt<T> {
         let icnt_port = ports.0;
         let base_port = ports.1;
 
-        let icnt = SimpleIcnt::new(icnt_port);
+        let icnt = SimpleIcnt::new(icnt_port, ideal_icnt);
         (icnt, base_port)
     }
 }
@@ -87,13 +90,17 @@ where
             ) in self.ports.iter_mut().enumerate()
             {
                 if let Ok(message) = in_port.recv() {
-                    let output_port = message.get_target_port();
-                    let input_row = input_port / self.row_size;
-                    let input_col = input_port % self.row_size;
-                    let output_row = output_port / self.row_size;
-                    let output_col = output_port % self.row_size;
-                    let cycle_to_go =
-                        input_row.abs_diff(output_row) + input_col.abs_diff(output_col);
+                    let cycle_to_go = match self.ideal_icnt {
+                        true => 1,
+                        false => {
+                            let output_port = message.get_target_port();
+                            let input_row = input_port / self.row_size;
+                            let input_col = input_port % self.row_size;
+                            let output_row = output_port / self.row_size;
+                            let output_col = output_port % self.row_size;
+                            input_row.abs_diff(output_row) + input_col.abs_diff(output_col)
+                        }
+                    };
 
                     context
                         .statistics
@@ -108,7 +115,6 @@ where
                     busy = true;
                     updated = true;
                     log::debug!("recv message from port {}", input_port);
-                    log::debug!("are going to send to port {}", output_port);
                 }
             }
         }
@@ -141,6 +147,9 @@ where
         match updated {
             true => context.statistics.icnt_statistics.busy_cycle += 1,
             false => context.statistics.icnt_statistics.idle_cycle += 1,
+        }
+        if busy && !updated {
+            log::debug!("icnt is busy but not updated");
         }
         (busy, updated)
     }
@@ -186,7 +195,7 @@ mod icnt_test {
         let icnt_port = ports.0;
         let base_port = ports.1;
 
-        let mut icnt = SimpleIcnt::new(icnt_port);
+        let mut icnt = SimpleIcnt::new(icnt_port, false);
         base_port[0]
             .out_port
             .send(TestMessage { output_id: 3 })

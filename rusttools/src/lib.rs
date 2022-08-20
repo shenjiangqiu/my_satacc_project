@@ -1,3 +1,5 @@
+#![deny(unused_must_use)]
+
 use std::ops::Add;
 pub mod config;
 #[macro_use]

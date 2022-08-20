@@ -49,6 +49,8 @@ impl SimComponent for Trail {
                 }
             } else {
                 // no more tasks, finish the current task
+                busy = true;
+                updated = true;
                 self.current_working_task = None;
             }
         }
@@ -61,6 +63,9 @@ impl SimComponent for Trail {
                 busy = true;
                 updated = true;
             }
+        }
+        if busy && !updated {
+            log::debug!("trail is busy but not updated");
         }
         (busy, updated)
     }

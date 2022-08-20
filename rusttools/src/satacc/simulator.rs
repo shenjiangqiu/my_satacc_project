@@ -1,6 +1,6 @@
 use std::fs::File;
 
-use env_logger::Env;
+use env_logger::{Env, Target};
 use serde::{Deserialize, Serialize};
 
 use crate::{
@@ -56,8 +56,8 @@ impl SimComponent for TrailAndOthers {
         match self.current_running_mode {
             RunMode::NoGapBtweenRounds => {
                 let trail_busy = self.trail.update(shared_status, current_cycle);
-                let _others_busy = self.others.update(shared_status, current_cycle);
-                trail_busy
+                let others_busy = self.others.update(shared_status, current_cycle);
+                (trail_busy.0, trail_busy.1 || others_busy.1)
             }
             RunMode::RealRoundGap => {
                 // let (trail_busy, trail_updated) = self.trail.update(shared_status, current_cycle);
@@ -85,6 +85,7 @@ impl Simulator {
     #[no_mangle]
     pub extern "C" fn get_simulator() -> *mut SimulatorWapper {
         env_logger::Builder::from_env(Env::default().default_filter_or("info"))
+            .target(Target::Stdout)
             .try_init()
             .unwrap_or_else(|_e| {
                 log::error!("fail to set logger!");
@@ -106,8 +107,12 @@ impl Simulator {
 
     /// run a single round of simulation,
     /// this will not consume any point, you can use it later
+    /// return still ok?
     #[no_mangle]
-    pub extern "C" fn run_single_task(task: *mut SataccMinisatTask, sim: *mut SimulatorWapper) {
+    pub extern "C" fn run_single_task(
+        task: *mut SataccMinisatTask,
+        sim: *mut SimulatorWapper,
+    ) -> bool {
         unsafe {
             let task = &mut *task;
             let sim = &mut *sim;
@@ -116,39 +121,71 @@ impl Simulator {
                 .unwrap_or_else(|_e| {
                     panic!("send task error");
                 });
-            sim.sim_runner.run();
-            sim.total_rounds += 1;
-            if sim.total_rounds % 1000 == 0 {
-                log::info!("total rounds: {}", sim.total_rounds);
+            match sim.sim_runner.run() {
+                Ok(_) => {
+                    sim.total_rounds += 1;
+                    if sim.total_rounds % 1000 == 0 {
+                        log::info!("total rounds: {}", sim.total_rounds);
+                    }
+                    return true;
+                }
+                Err(e) => {
+                    // run extra 100 cycle for log infomation
+                    log::error!("simluation start error, the remaining is the extra 100 cycles");
+                    for _ in 0..100 {
+                        match sim.sim_runner.run() {
+                            Ok(_) => {
+                                log::error!("cant be dead lock and resume!");
+                            }
+                            Err(e) => {
+                                log::error!("simulation error: {}", e);
+                            }
+                        }
+                    }
+                    log::error!("simulation error: {}", e);
+                    return false;
+                }
             }
         }
     }
     /// finish the simulation, this will consume the simulator
+    /// return still ok?
     #[no_mangle]
-    pub extern "C" fn finish_simulator(task: *mut SataccMinisatTask, sim: *mut SimulatorWapper) {
+    pub extern "C" fn finish_simulator(
+        task: *mut SataccMinisatTask,
+        sim: *mut SimulatorWapper,
+    ) -> bool {
         unsafe {
             let mut sim: SimulatorWapper = *Box::from_raw(sim);
 
             sim.sim_runner.get_sim_mut().current_running_mode = RunMode::RealRoundGap;
-            sim.sim_runner.run();
-
-            log::info!(
-                "finish simulator cycle:{}",
-                sim.sim_runner.get_current_cycle()
-            );
-            let (_, mut status, cycle) = sim.sim_runner.into_inner();
-            status.statistics.total_cycle = cycle;
-            status.save_statistics("statistics.json");
-            serde_json::to_writer_pretty(File::create("cycle.json").unwrap(), &cycle).unwrap();
-            // release the task builder
-            let _task = Box::from_raw(task);
+            match sim.sim_runner.run() {
+                Ok(_) => {
+                    log::info!(
+                        "finish simulator cycle:{}",
+                        sim.sim_runner.get_current_cycle()
+                    );
+                    let (_, mut status, cycle) = sim.sim_runner.into_inner();
+                    status.statistics.total_cycle = cycle;
+                    status.save_statistics("statistics.json");
+                    serde_json::to_writer_pretty(File::create("cycle.json").unwrap(), &cycle)
+                        .unwrap();
+                    // release the task builder
+                    let _task = Box::from_raw(task);
+                    return true;
+                }
+                Err(_) => {
+                    return false;
+                }
+            }
         }
     }
 
     /// run full simulation and will delete the task, do not use the task anymore!
     #[no_mangle]
-    pub extern "C" fn run_full_expr(task: *mut SataccMinisatTask) {
+    pub extern "C" fn run_full_expr(task: *mut SataccMinisatTask) -> bool {
         env_logger::Builder::from_env(Env::default().default_filter_or("info"))
+            .target(Target::Stdout)
             .try_init()
             .unwrap_or_default();
         let mut task = unsafe { Box::from_raw(task) };
@@ -165,7 +202,13 @@ impl Simulator {
             task_sender.send(single_round_task).unwrap_or_else(|_e| {
                 panic!("cannot send task!");
             });
-            sim_runner.run();
+            match sim_runner.run() {
+                Ok(_) => {}
+                Err(_) => {
+                    log::error!("simulation error!");
+                    return false;
+                }
+            }
         }
         log::info!(
             "simulator finished! total cycles: {}",
@@ -175,6 +218,7 @@ impl Simulator {
         status.statistics.total_cycle = cycle;
         status.save_statistics("statistics.json");
         serde_json::to_writer_pretty(File::create("cycle.json").unwrap(), &cycle).unwrap();
+        return true;
     }
     pub fn build(&self, init_runing_mode: RunMode) -> (SimSender<SingleRoundTask>, TrailAndOthers) {
         log::info!("build simulator with mode: {init_runing_mode:?}");
@@ -192,10 +236,12 @@ impl Simulator {
 
         // build the icnt from pe to cache
         let num_caches = 8;
+        let ideal_icnt = self.config.ideal_icnt;
         let (mem_icnt, cache_base_ports) = SimpleIcnt::<IcntMsgWrapper<MemReq>>::new_with_config(
             self.config.n_watchers + num_caches,
             self.config.channel_size,
             &channel_builder,
+            ideal_icnt,
         );
 
         // first build the icnt from watchers to clauses
@@ -205,6 +251,7 @@ impl Simulator {
                 self.config.n_watchers,
                 self.config.channel_size,
                 &channel_builder,
+                ideal_icnt,
             );
 
         // build watchers and clauses
@@ -303,6 +350,7 @@ mod test {
             seq: false,
             ideal_memory: false,
             ideal_l3cache: false,
+            ideal_icnt: false,
             multi_port: 1,
             dram_config: DramType::HBM,
             watcher_to_clause_icnt: IcntType::Mesh,
@@ -360,7 +408,7 @@ mod test {
                 .into(),
             })
             .unwrap_or_else(|_| {});
-        sim_runner.run();
+        sim_runner.run().unwrap();
     }
     #[test]
     fn test_c_interface_single_round() {

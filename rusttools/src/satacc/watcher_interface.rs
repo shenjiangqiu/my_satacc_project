@@ -233,7 +233,12 @@ impl SimComponent for WatcherInterface {
             &mut self.private_cache,
         )
             .update(shared_status, current_cycle);
-        (busy || c_busy, updated || c_update)
+        let busy = busy || c_busy;
+        let updated = updated || c_update;
+        if busy && !updated {
+            log::debug!("WatcherInterface is busy but not updated! {current_cycle}");
+        }
+        (busy, updated)
         // (
         //     busy || watcher_busy || clause_busy || cache_busy,
         //     updated || watcher_updated || clause_updated || cache_updated,
@@ -297,18 +302,18 @@ mod test {
                 single_watcher_tasks: VecDeque::new(),
             })
             .unwrap();
-        sim_runner.run();
+        sim_runner.run().unwrap();
         let req = icnt_port_base.in_port.recv().unwrap();
         log::debug!("{:?}", req);
         // send it back
         icnt_port_base.out_port.send(req).unwrap();
-        sim_runner.run();
+        sim_runner.run().unwrap();
         // the watcher will send a mem req for watcher data
         let req = icnt_port_base.in_port.recv().unwrap();
         log::debug!("{:?}", req);
         // send it back
         icnt_port_base.out_port.send(req).unwrap();
-        sim_runner.run();
+        sim_runner.run().unwrap();
         // because there are no clause in this watcher task, so no blocker request will be sent!
         assert!(icnt_port_base.in_port.recv().is_err());
     }
@@ -357,18 +362,18 @@ mod test {
                 single_watcher_tasks: [clause_task].into(),
             })
             .unwrap();
-        sim_runner.run();
+        sim_runner.run().unwrap();
         let req = icnt_port_base.in_port.recv().unwrap();
         log::debug!("{:?}", req);
         // send it back
         icnt_port_base.out_port.send(req).unwrap();
-        sim_runner.run();
+        sim_runner.run().unwrap();
         // the watcher will send a mem req for watcher data
         let req = icnt_port_base.in_port.recv().unwrap();
         log::debug!("{:?}", req);
         // send it back
         icnt_port_base.out_port.send(req).unwrap();
-        sim_runner.run();
+        sim_runner.run().unwrap();
         // because there are one clause task, so it will read the private cache,
         //but it will not send the clause task to other interface, because the clause is not required to read clause data
     }
@@ -423,31 +428,31 @@ mod test {
                 single_watcher_tasks: [clause_task].into(),
             })
             .unwrap();
-        sim_runner.run();
+        sim_runner.run().unwrap();
         let req = icnt_port_base.in_port.recv().unwrap();
         log::debug!("{:?}", req);
         // send it back
         icnt_port_base.out_port.send(req).unwrap();
-        sim_runner.run();
+        sim_runner.run().unwrap();
         // the watcher will send a mem req for watcher data
         let req = icnt_port_base.in_port.recv().unwrap();
         log::debug!("{:?}", req);
         // send it back
         icnt_port_base.out_port.send(req).unwrap();
-        sim_runner.run();
+        sim_runner.run().unwrap();
         // because there are one clause task, so it will read the private cache,
         // and it will send the request to the clause unit.
         let req = task_port_base.in_port.recv().unwrap();
         log::debug!("{:?}", req);
         // send it back
         task_port_base.out_port.send(req).unwrap();
-        sim_runner.run();
+        sim_runner.run().unwrap();
         // now the clause unit will receive the task, and it will read the clause
         let req = icnt_port_base.in_port.recv().unwrap();
         log::debug!("{:?}", req);
         // send it back
         icnt_port_base.out_port.send(req).unwrap();
-        sim_runner.run();
+        sim_runner.run().unwrap();
         // not the clause unit will finished read clause, then access the private cache for value, then finish the task! done!
     }
 }

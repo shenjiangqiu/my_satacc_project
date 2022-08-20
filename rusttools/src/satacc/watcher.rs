@@ -64,7 +64,8 @@ impl Watcher {
         }
     }
 }
-enum BusyReason {
+#[derive(Debug)]
+enum IdleReason {
     NoTask,
     CannotSendL3Cache,
     CannotSendPrivateCache,
@@ -77,7 +78,7 @@ impl SimComponent for Watcher {
     fn update(&mut self, context: &mut Self::SharedStatus, current_cycle: usize) -> (bool, bool) {
         let mut busy = false;
         let mut updated = false;
-        let mut reason = BusyReason::NoTask;
+        let mut reason = IdleReason::NoTask;
         // first check the new arrived watcher tasks
         if self.total_ongoing_meta_mem_reqs < 256 && self.meta_finished_queue.len() < 256 {
             if let Ok(watcher_task) = self.watcher_task_receiver.recv() {
@@ -103,7 +104,7 @@ impl SimComponent for Watcher {
                         // cannot send to cache now
                         log::debug!("cannot meta data request send to cache now");
                         self.watcher_task_receiver.ret(watcher_task);
-                        reason = BusyReason::CannotSendL3Cache;
+                        reason = IdleReason::CannotSendL3Cache;
                     }
                 }
             }
@@ -130,7 +131,7 @@ impl SimComponent for Watcher {
                         // cannot send to cache now
                         log::debug!("cannot send watcher data request send to cache now");
                         self.meta_finished_queue.push_front(watcher_task);
-                        reason = BusyReason::CannotSendL3Cache;
+                        reason = IdleReason::CannotSendL3Cache;
                     }
                 }
             }
@@ -171,7 +172,7 @@ impl SimComponent for Watcher {
                         // cannot send to cache now
                         log::debug!("cannot send blocker request send to cache now");
                         self.single_watcher_task_queue.push_front(single_task);
-                        reason = BusyReason::CannotSendPrivateCache;
+                        reason = IdleReason::CannotSendPrivateCache;
                     }
                 }
             }
@@ -225,7 +226,7 @@ impl SimComponent for Watcher {
                         let clause_task = clause_task.msg;
                         self.single_watcher_process_finished_queue
                             .push_front(clause_task);
-                        reason = BusyReason::CannotSendClause;
+                        reason = IdleReason::CannotSendClause;
                     }
                 }
             }
@@ -284,45 +285,48 @@ impl SimComponent for Watcher {
             }
             false => {
                 if !self.mem_req_id_to_clause_task.is_empty() {
-                    reason = BusyReason::WaitingL1Ret;
+                    reason = IdleReason::WaitingL1Ret;
                 }
                 if !self.mem_req_id_to_watcher_task.is_empty() {
-                    reason = BusyReason::WaitingL3Ret;
+                    reason = IdleReason::WaitingL3Ret;
                 }
                 context.statistics.watcher_statistics[self.watcher_pe_id].idle_cycle += 1;
                 match reason {
-                    BusyReason::NoTask => {
+                    IdleReason::NoTask => {
                         context.statistics.watcher_statistics[self.watcher_pe_id]
                             .idle_stat
                             .idle_no_task += 1
                     }
-                    BusyReason::CannotSendL3Cache => {
+                    IdleReason::CannotSendL3Cache => {
                         context.statistics.watcher_statistics[self.watcher_pe_id]
                             .idle_stat
                             .idle_send_l3 += 1
                     }
-                    BusyReason::CannotSendPrivateCache => {
+                    IdleReason::CannotSendPrivateCache => {
                         context.statistics.watcher_statistics[self.watcher_pe_id]
                             .idle_stat
                             .idle_send_l1 += 1
                     }
-                    BusyReason::CannotSendClause => {
+                    IdleReason::CannotSendClause => {
                         context.statistics.watcher_statistics[self.watcher_pe_id]
                             .idle_stat
                             .idle_send_clause += 1
                     }
-                    BusyReason::WaitingL3Ret => {
+                    IdleReason::WaitingL3Ret => {
                         context.statistics.watcher_statistics[self.watcher_pe_id]
                             .idle_stat
                             .idle_wating_l3 += 1
                     }
-                    BusyReason::WaitingL1Ret => {
+                    IdleReason::WaitingL1Ret => {
                         context.statistics.watcher_statistics[self.watcher_pe_id]
                             .idle_stat
                             .idle_wating_l1 += 1
                     }
                 }
             }
+        }
+        if busy && !updated {
+            log::debug!("Watcher is busy! but not updated {current_cycle},idle reason:{reason:?}");
         }
         (busy, updated)
     }

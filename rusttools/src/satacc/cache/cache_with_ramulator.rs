@@ -185,6 +185,9 @@ impl SimComponent for CacheWithRamulator {
             }
         }
         self.ramulator.cycle();
+        if busy && !updated {
+            log::debug!("no update at cycle: {current_cycle}");
+        }
         (busy, updated)
     }
 }
@@ -239,6 +242,6 @@ mod test {
         }
 
         let mut sim_runner = SimRunner::new(cache, status);
-        sim_runner.run();
+        sim_runner.run().unwrap();
     }
 }
