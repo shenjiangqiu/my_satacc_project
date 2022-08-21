@@ -143,6 +143,8 @@ where
                         "simulation is busy but not updated at cycle {}",
                         self.current_cycle
                     );
+                    self.current_cycle += 1;
+
                     return Err(eyre::eyre!(
                         "simulation is busy but not updated at cycle {}",
                         self.current_cycle

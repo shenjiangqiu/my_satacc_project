@@ -195,12 +195,17 @@ impl SimComponent for WatcherInterface {
         // recv the private cache, it should contains clause value and watcher
         if let Ok(mem_req) = self.private_cache_out_receiver.recv() {
             busy = true;
+            let msg_id = mem_req.msg.id;
+            log::debug!(
+                "WatcherInterface Recv mem req from private cache! id: {} cycle: {current_cycle}",
+                mem_req.msg.id,
+            );
             match mem_req.msg.req_type {
                 MemReqType::ClauseReadValue(clause_inner_id) => {
                     match self.clause_private_cache_senders[clause_inner_id].send(mem_req) {
                         Ok(_) => {
                             log::debug!(
-                                "WatcherInterface Send mem req to clause:{clause_inner_id}! {current_cycle}",
+                                "WatcherInterface Send mem req id {msg_id} to clause:{clause_inner_id}! {current_cycle}",
                             );
                             updated = true;
                         }
@@ -209,18 +214,17 @@ impl SimComponent for WatcherInterface {
                         }
                     }
                 }
-                MemReqType::WatcherReadBlocker => match self
-                    .watcher_private_cache_sender
-                    .send(mem_req)
-                {
-                    Ok(_) => {
-                        log::debug!("WatcherInterface Send mem req to watcher! {current_cycle}");
-                        updated = true;
+                MemReqType::WatcherReadBlocker => {
+                    match self.watcher_private_cache_sender.send(mem_req) {
+                        Ok(_) => {
+                            log::debug!("WatcherInterface Send mem req to watcher! id: {msg_id} cycle: {current_cycle}");
+                            updated = true;
+                        }
+                        Err(mem_req) => {
+                            self.private_cache_out_receiver.ret(mem_req);
+                        }
                     }
-                    Err(mem_req) => {
-                        self.private_cache_out_receiver.ret(mem_req);
-                    }
-                },
+                }
                 _ => unreachable!(),
             }
         }

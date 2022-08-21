@@ -53,6 +53,7 @@ use self::{
 pub struct SataccStatus {
     pub current_mem_req_id: usize,
     pub statistics: Statistics,
+    pub verbose_mode: bool,
 }
 
 impl SataccStatus {
@@ -61,6 +62,7 @@ impl SataccStatus {
         SataccStatus {
             current_mem_req_id: 0,
             statistics,
+            verbose_mode: false,
         }
     }
 

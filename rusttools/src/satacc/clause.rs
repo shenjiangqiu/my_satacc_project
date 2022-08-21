@@ -1,4 +1,4 @@
-use std::collections::{BTreeMap, BTreeSet, VecDeque};
+use std::collections::{BTreeMap, VecDeque};
 
 use crate::{
     satacc::MemReqType,
@@ -7,11 +7,11 @@ use crate::{
 
 use super::{icnt::IcntMsgWrapper, satacc_minisat_task::ClauseTask, MemReq, SataccStatus};
 
-struct ClauseValueTracker {
-    clause_task: ClauseTask,
-    waiting_to_send_reqs: VecDeque<IcntMsgWrapper<MemReq>>,
-    unfinished_req_id: BTreeSet<usize>,
-}
+// struct ClauseValueTracker {
+//     clause_task: ClauseTask,
+//     waiting_to_send_reqs: VecDeque<IcntMsgWrapper<MemReq>>,
+//     unfinished_req_id: BTreeSet<usize>,
+// }
 pub struct ClauseUnit {
     watcher_pe_id: usize,
     total_watchers: usize,
@@ -22,11 +22,16 @@ pub struct ClauseUnit {
     clause_data_ready_queue: VecDeque<ClauseTask>,
     clause_value_ready_queue: VecDeque<ClauseTask>,
     current_processing_task: Option<(usize, ClauseTask)>,
-    current_reading_value_task: Option<ClauseValueTracker>,
-
+    // current_reading_value_task: Option<ClauseValueTracker>,
+    /// task_id,(num_waiting_memreq,clauseTask)
+    current_waiting_reading_value_tasks: BTreeMap<usize, (usize, ClauseTask)>,
+    current_waiting_reading_value_reqs: VecDeque<IcntMsgWrapper<MemReq>>,
+    /// the req id to task id
+    current_waiting_value_memid_to_task_id: BTreeMap<usize, usize>,
     mem_req_id_to_clause_task: BTreeMap<usize, ClauseTask>,
     total_clause_data_mem_ongoing: usize,
     total_private_mem_ongoing: usize,
+    current_task_id: usize,
 }
 #[derive(Debug)]
 enum IdleReason {
@@ -56,10 +61,14 @@ impl ClauseUnit {
             watcher_pe_id,
             total_watchers,
             clause_pe_id,
-            current_reading_value_task: None,
+            // current_reading_value_task: None,
             mem_req_id_to_clause_task: BTreeMap::new(),
             total_clause_data_mem_ongoing: 0,
             total_private_mem_ongoing: 0,
+            current_task_id: 0,
+            current_waiting_reading_value_reqs: VecDeque::new(),
+            current_waiting_reading_value_tasks: BTreeMap::new(),
+            current_waiting_value_memid_to_task_id: BTreeMap::new(),
         }
     }
 }
@@ -111,45 +120,72 @@ impl SimComponent for ClauseUnit {
         }
 
         // try get a task to start to read the clause value
-        if self.current_reading_value_task.is_none() {
+        if self.current_waiting_reading_value_tasks.len() < 256 {
             if let Some(task) = self.clause_data_ready_queue.pop_front() {
                 busy = true;
                 updated = true;
+
                 let mem_req =
                     task.get_read_clause_value_task(context, self.watcher_pe_id, self.clause_pe_id);
+                let req_len = mem_req.len();
+                assert!(req_len != 0);
+                // the req id to task id
+                for req in mem_req.iter() {
+                    self.current_waiting_value_memid_to_task_id
+                        .insert(req.msg.id, self.current_task_id);
+                }
+                log::debug!(
+                    "ClauseUnit add value reqs for task {} ,num reqs: {},req_ids: {:?}",
+                    self.current_task_id,
+                    req_len,
+                    mem_req.iter().map(|x| x.msg.id).collect::<Vec<usize>>()
+                );
+                self.current_waiting_reading_value_reqs.extend(mem_req);
+
+                // task id to task
+                self.current_waiting_reading_value_tasks
+                    .insert(self.current_task_id, (req_len, task));
+                self.current_task_id += 1;
+
                 context.statistics.clause_statistics[self.watcher_pe_id].single_clause
                     [self.clause_pe_id]
-                    .total_value_read += task.clause_data.as_ref().unwrap().clause_value_addr.len();
-                self.current_reading_value_task = Some(ClauseValueTracker {
-                    clause_task: task,
-                    waiting_to_send_reqs: mem_req.into_iter().collect(),
-                    unfinished_req_id: BTreeSet::new(),
-                });
+                    .total_value_read += req_len;
             }
+        } else {
+            busy = true;
+            log::debug!(
+                "cannot send value task because current_waiting_reading_value_tasks have len: {}",
+                self.current_waiting_reading_value_tasks.len()
+            );
+            // log::debug!(
+            //     "current_waiting_reading_value_tasks: {:?}",
+            //     self.current_waiting_reading_value_tasks
+            // );
         }
         // process the clause value task
         if self.total_private_mem_ongoing < 256 && self.clause_value_ready_queue.len() < 256 {
-            if let Some(reqs) = self.current_reading_value_task.as_mut() {
-                if let Some(req) = reqs.waiting_to_send_reqs.pop_front() {
-                    busy = true;
-                    let id = req.msg.id;
-                    match self.private_cache_port.out_port.send(req) {
-                        Ok(_) => {
-                            updated = true;
-                            reqs.unfinished_req_id.insert(id);
-                            self.total_private_mem_ongoing += 1;
-                        }
-                        Err(e) => {
-                            // cannot send to cache now
-                            // just ret the task so we don't need the target port
-                            log::debug!("ClauseUnit cannot send read value to mem {current_cycle}");
-                            reqs.waiting_to_send_reqs.push_front(e);
-                            idle_reason = IdleReason::SendingL1;
-                        }
+            if let Some(req) = self.current_waiting_reading_value_reqs.pop_front() {
+                busy = true;
+                // let id = req.msg.id;
+                let req_id = req.msg.id;
+                match self.private_cache_port.out_port.send(req) {
+                    Ok(_) => {
+                        updated = true;
+                        self.total_private_mem_ongoing += 1;
+                        log::debug!("ClauseUnit Send private cache {req_id:?}! {current_cycle}");
+                    }
+                    Err(e) => {
+                        // cannot send to cache now
+                        // just ret the task so we don't need the target port
+                        // never ignore any value, that's a bug!
+                        self.current_waiting_reading_value_reqs.push_front(e);
+                        log::debug!("ClauseUnit cannot send read value to mem {current_cycle}");
+                        idle_reason = IdleReason::SendingL1;
                     }
                 }
             }
         } else {
+            busy = true;
             log::debug!(
                 "ClauseUnit cannot send read value to private cache {current_cycle},\
                 total_private_mem_ongoing: {},\
@@ -200,16 +236,33 @@ impl SimComponent for ClauseUnit {
 
         // process private cache ret
         if let Ok(mem_req) = self.private_cache_port.in_port.recv() {
-            log::debug!("ClauseUnit Receive mem_req from private cache! {current_cycle}");
+            let req_id = mem_req.msg.id;
+            log::debug!(
+                "ClauseUnit Receive mem_req from private cache! id {} cycle {current_cycle}",
+                req_id
+            );
             self.total_private_mem_ongoing -= 1;
             match mem_req.msg.req_type {
                 MemReqType::ClauseReadValue(_clause_id) => {
-                    let current_waiting = self.current_reading_value_task.as_mut().unwrap();
-                    current_waiting.unfinished_req_id.remove(&mem_req.msg.id);
-                    if current_waiting.unfinished_req_id.is_empty() {
-                        let current_waiting = self.current_reading_value_task.take().unwrap();
-                        self.clause_value_ready_queue
-                            .push_back(current_waiting.clause_task);
+                    let task_id = self
+                        .current_waiting_value_memid_to_task_id
+                        .remove(&req_id)
+                        .unwrap();
+                    let (req_len, _task) = self
+                        .current_waiting_reading_value_tasks
+                        .get_mut(&task_id)
+                        .unwrap();
+                    *req_len -= 1;
+                    log::debug!(
+                        "receive a req,current len: {} for task: {task_id}",
+                        *req_len
+                    );
+                    if *req_len == 0 {
+                        let (_, clause_task) = self
+                            .current_waiting_reading_value_tasks
+                            .remove(&task_id)
+                            .unwrap();
+                        self.clause_value_ready_queue.push_back(clause_task);
                     }
                 }
                 _ => unreachable!(),
@@ -233,10 +286,8 @@ impl SimComponent for ClauseUnit {
                     idle_reason = IdleReason::WaitingL3;
                 }
                 // some private cache inflight
-                if let Some(tracker) = &self.current_reading_value_task {
-                    if !tracker.unfinished_req_id.is_empty() {
-                        idle_reason = IdleReason::WaitingL1;
-                    }
+                if !self.current_waiting_reading_value_tasks.is_empty() {
+                    idle_reason = IdleReason::WaitingL1;
                 }
                 let idle_stat = &mut context.statistics.clause_statistics[self.watcher_pe_id]
                     .single_clause[self.clause_pe_id]
@@ -254,6 +305,22 @@ impl SimComponent for ClauseUnit {
             log::debug!(
                 "ClauseUnit is busy! but not updated {current_cycle}, idle_reason: {idle_reason:?}",
             );
+            if context.verbose_mode {
+                log::error!(
+                    "current_waiting_reading_value_tasks: {:?}",
+                    self.current_waiting_reading_value_tasks
+                        .iter()
+                        .map(|(k, v)| (k, v.0))
+                        .collect::<Vec<_>>()
+                );
+                log::error!(
+                    "current_waiting_value_req_queue mem_id: {:?}",
+                    self.current_waiting_reading_value_reqs
+                        .iter()
+                        .map(|req| req.msg.id)
+                        .collect::<Vec<_>>()
+                )
+            }
         }
         (busy, updated)
     }

@@ -130,6 +130,7 @@ impl Simulator {
                     return true;
                 }
                 Err(e) => {
+                    sim.sim_runner.get_shared_status_mut().verbose_mode = true;
                     // run extra 100 cycle for log infomation
                     log::error!("simluation start error, the remaining is the extra 100 cycles");
                     for _ in 0..100 {
@@ -220,6 +221,7 @@ impl Simulator {
         serde_json::to_writer_pretty(File::create("cycle.json").unwrap(), &cycle).unwrap();
         return true;
     }
+    /// build the simulator
     pub fn build(&self, init_runing_mode: RunMode) -> (SimSender<SingleRoundTask>, TrailAndOthers) {
         log::info!("build simulator with mode: {init_runing_mode:?}");
         let channel_builder = ChannelBuilder::new();
@@ -269,7 +271,7 @@ impl Simulator {
                     self.config.channel_size,
                     &self.config.private_cache_config,
                     self.config.l1_hit_latency,
-                    self.config.miss_latency,
+                    self.config.l3_hit_latency, // the miss latency for l1 is the hit latency for l3
                     self.config.n_clauses,
                     watcher_pe_id,
                     self.config.n_watchers,

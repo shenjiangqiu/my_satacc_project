@@ -4,6 +4,7 @@ n_clauses = 1
 mems = 8
 icnt = 'Mesh'
 seq = false
+ideal_icnt = false
 ideal_memory = false
 ideal_l3cache = false
 multi_port = 1
@@ -20,7 +21,8 @@ l3_cache_type = 'Simple'
 ramu_cache_config = 'HBM'
 l1_hit_latency = 1
 l3_hit_latency = 15
-miss_latency = 120
+l1_miss_latency=15
+l3_miss_latency = 120
 init_running_mode = 'RealRoundGap'
 
 [private_cache_config]
