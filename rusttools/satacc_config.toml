@@ -4,6 +4,7 @@ n_clauses = 1
 mems = 8
 icnt = 'Mesh'
 seq = false
+pipeline_clause_value_read = true
 ideal_icnt = false
 ideal_memory = false
 ideal_l3cache = false
@@ -21,8 +22,7 @@ l3_cache_type = 'Simple'
 ramu_cache_config = 'HBM'
 l1_hit_latency = 1
 l3_hit_latency = 15
-l1_miss_latency=15
-l3_miss_latency = 120
+miss_latency = 120
 init_running_mode = 'RealRoundGap'
 
 [private_cache_config]

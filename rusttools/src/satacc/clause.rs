@@ -1,4 +1,4 @@
-use std::collections::{BTreeMap, VecDeque};
+use std::collections::{BTreeMap, BTreeSet, VecDeque};
 
 use crate::{
     satacc::MemReqType,
@@ -7,11 +7,11 @@ use crate::{
 
 use super::{icnt::IcntMsgWrapper, satacc_minisat_task::ClauseTask, MemReq, SataccStatus};
 
-// struct ClauseValueTracker {
-//     clause_task: ClauseTask,
-//     waiting_to_send_reqs: VecDeque<IcntMsgWrapper<MemReq>>,
-//     unfinished_req_id: BTreeSet<usize>,
-// }
+struct ClauseValueTracker {
+    clause_task: ClauseTask,
+    waiting_to_send_reqs: VecDeque<IcntMsgWrapper<MemReq>>,
+    unfinished_req_id: BTreeSet<usize>,
+}
 pub struct ClauseUnit {
     watcher_pe_id: usize,
     total_watchers: usize,
@@ -22,7 +22,7 @@ pub struct ClauseUnit {
     clause_data_ready_queue: VecDeque<ClauseTask>,
     clause_value_ready_queue: VecDeque<ClauseTask>,
     current_processing_task: Option<(usize, ClauseTask)>,
-    // current_reading_value_task: Option<ClauseValueTracker>,
+    current_reading_value_task: Option<ClauseValueTracker>,
     /// task_id,(num_waiting_memreq,clauseTask)
     current_waiting_reading_value_tasks: BTreeMap<usize, (usize, ClauseTask)>,
     current_waiting_reading_value_reqs: VecDeque<IcntMsgWrapper<MemReq>>,
@@ -32,6 +32,7 @@ pub struct ClauseUnit {
     total_clause_data_mem_ongoing: usize,
     total_private_mem_ongoing: usize,
     current_task_id: usize,
+    pipeline_clause_value_read: bool,
 }
 #[derive(Debug)]
 enum IdleReason {
@@ -50,6 +51,7 @@ impl ClauseUnit {
         watcher_pe_id: usize,
         total_watchers: usize,
         clause_pe_id: usize,
+        pipeline_clause_value_read: bool,
     ) -> Self {
         ClauseUnit {
             clause_task_in,
@@ -61,7 +63,7 @@ impl ClauseUnit {
             watcher_pe_id,
             total_watchers,
             clause_pe_id,
-            // current_reading_value_task: None,
+            current_reading_value_task: None,
             mem_req_id_to_clause_task: BTreeMap::new(),
             total_clause_data_mem_ongoing: 0,
             total_private_mem_ongoing: 0,
@@ -69,6 +71,7 @@ impl ClauseUnit {
             current_waiting_reading_value_reqs: VecDeque::new(),
             current_waiting_reading_value_tasks: BTreeMap::new(),
             current_waiting_value_memid_to_task_id: BTreeMap::new(),
+            pipeline_clause_value_read,
         }
     }
 }
@@ -120,67 +123,129 @@ impl SimComponent for ClauseUnit {
         }
 
         // try get a task to start to read the clause value
-        if self.current_waiting_reading_value_tasks.len() < 256 {
-            if let Some(task) = self.clause_data_ready_queue.pop_front() {
-                busy = true;
-                updated = true;
+        match self.pipeline_clause_value_read {
+            true => {
+                // using pipeline to read the clause value
+                if self.current_waiting_reading_value_tasks.len() < 256 {
+                    if let Some(task) = self.clause_data_ready_queue.pop_front() {
+                        busy = true;
+                        updated = true;
 
-                let mem_req =
-                    task.get_read_clause_value_task(context, self.watcher_pe_id, self.clause_pe_id);
-                let req_len = mem_req.len();
-                assert!(req_len != 0);
-                // the req id to task id
-                for req in mem_req.iter() {
-                    self.current_waiting_value_memid_to_task_id
-                        .insert(req.msg.id, self.current_task_id);
-                }
-                log::debug!(
-                    "ClauseUnit add value reqs for task {} ,num reqs: {},req_ids: {:?}",
-                    self.current_task_id,
-                    req_len,
-                    mem_req.iter().map(|x| x.msg.id).collect::<Vec<usize>>()
+                        let mem_req = task.get_read_clause_value_task(
+                            context,
+                            self.watcher_pe_id,
+                            self.clause_pe_id,
+                        );
+                        let req_len = mem_req.len();
+                        assert!(req_len != 0);
+                        // the req id to task id
+                        for req in mem_req.iter() {
+                            self.current_waiting_value_memid_to_task_id
+                                .insert(req.msg.id, self.current_task_id);
+                        }
+                        log::debug!(
+                            "ClauseUnit add value reqs for task {} ,num reqs: {},req_ids: {:?}",
+                            self.current_task_id,
+                            req_len,
+                            mem_req.iter().map(|x| x.msg.id).collect::<Vec<usize>>()
+                        );
+                        self.current_waiting_reading_value_reqs.extend(mem_req);
+
+                        // task id to task
+                        self.current_waiting_reading_value_tasks
+                            .insert(self.current_task_id, (req_len, task));
+                        self.current_task_id += 1;
+
+                        context.statistics.clause_statistics[self.watcher_pe_id].single_clause
+                            [self.clause_pe_id]
+                            .total_value_read += req_len;
+                    }
+                } else {
+                    busy = true;
+                    log::debug!(
+                    "cannot send value task because current_waiting_reading_value_tasks have len: {}",
+                    self.current_waiting_reading_value_tasks.len()
                 );
-                self.current_waiting_reading_value_reqs.extend(mem_req);
-
-                // task id to task
-                self.current_waiting_reading_value_tasks
-                    .insert(self.current_task_id, (req_len, task));
-                self.current_task_id += 1;
-
-                context.statistics.clause_statistics[self.watcher_pe_id].single_clause
-                    [self.clause_pe_id]
-                    .total_value_read += req_len;
+                    // log::debug!(
+                    //     "current_waiting_reading_value_tasks: {:?}",
+                    //     self.current_waiting_reading_value_tasks
+                    // );
+                }
             }
-        } else {
-            busy = true;
-            log::debug!(
-                "cannot send value task because current_waiting_reading_value_tasks have len: {}",
-                self.current_waiting_reading_value_tasks.len()
-            );
-            // log::debug!(
-            //     "current_waiting_reading_value_tasks: {:?}",
-            //     self.current_waiting_reading_value_tasks
-            // );
-        }
+            false => {
+                if self.current_reading_value_task.is_none() {
+                    if let Some(task) = self.clause_data_ready_queue.pop_front() {
+                        busy = true;
+                        updated = true;
+                        let mem_req = task.get_read_clause_value_task(
+                            context,
+                            self.watcher_pe_id,
+                            self.clause_pe_id,
+                        );
+                        context.statistics.clause_statistics[self.watcher_pe_id].single_clause
+                            [self.clause_pe_id]
+                            .total_value_read +=
+                            task.clause_data.as_ref().unwrap().clause_value_addr.len();
+                        self.current_reading_value_task = Some(ClauseValueTracker {
+                            clause_task: task,
+                            waiting_to_send_reqs: mem_req.into_iter().collect(),
+                            unfinished_req_id: BTreeSet::new(),
+                        });
+                    }
+                }
+            }
+        };
         // process the clause value task
         if self.total_private_mem_ongoing < 256 && self.clause_value_ready_queue.len() < 256 {
-            if let Some(req) = self.current_waiting_reading_value_reqs.pop_front() {
-                busy = true;
-                // let id = req.msg.id;
-                let req_id = req.msg.id;
-                match self.private_cache_port.out_port.send(req) {
-                    Ok(_) => {
-                        updated = true;
-                        self.total_private_mem_ongoing += 1;
-                        log::debug!("ClauseUnit Send private cache {req_id:?}! {current_cycle}");
+            match self.pipeline_clause_value_read {
+                true => {
+                    if let Some(req) = self.current_waiting_reading_value_reqs.pop_front() {
+                        busy = true;
+                        // let id = req.msg.id;
+                        let req_id = req.msg.id;
+                        match self.private_cache_port.out_port.send(req) {
+                            Ok(_) => {
+                                updated = true;
+                                self.total_private_mem_ongoing += 1;
+                                log::debug!(
+                                    "ClauseUnit Send private cache {req_id:?}! {current_cycle}"
+                                );
+                            }
+                            Err(e) => {
+                                // cannot send to cache now
+                                // just ret the task so we don't need the target port
+                                // never ignore any value, that's a bug!
+                                self.current_waiting_reading_value_reqs.push_front(e);
+                                log::debug!(
+                                    "ClauseUnit cannot send read value to mem {current_cycle}"
+                                );
+                                idle_reason = IdleReason::SendingL1;
+                            }
+                        }
                     }
-                    Err(e) => {
-                        // cannot send to cache now
-                        // just ret the task so we don't need the target port
-                        // never ignore any value, that's a bug!
-                        self.current_waiting_reading_value_reqs.push_front(e);
-                        log::debug!("ClauseUnit cannot send read value to mem {current_cycle}");
-                        idle_reason = IdleReason::SendingL1;
+                }
+                false => {
+                    if let Some(reqs) = self.current_reading_value_task.as_mut() {
+                        if let Some(req) = reqs.waiting_to_send_reqs.pop_front() {
+                            busy = true;
+                            let id = req.msg.id;
+                            match self.private_cache_port.out_port.send(req) {
+                                Ok(_) => {
+                                    updated = true;
+                                    reqs.unfinished_req_id.insert(id);
+                                    self.total_private_mem_ongoing += 1;
+                                }
+                                Err(e) => {
+                                    // cannot send to cache now
+                                    // just ret the task so we don't need the target port
+                                    log::debug!(
+                                        "ClauseUnit cannot send read value to mem {current_cycle}"
+                                    );
+                                    reqs.waiting_to_send_reqs.push_front(e);
+                                    idle_reason = IdleReason::SendingL1;
+                                }
+                            }
+                        }
                     }
                 }
             }
@@ -243,28 +308,39 @@ impl SimComponent for ClauseUnit {
             );
             self.total_private_mem_ongoing -= 1;
             match mem_req.msg.req_type {
-                MemReqType::ClauseReadValue(_clause_id) => {
-                    let task_id = self
-                        .current_waiting_value_memid_to_task_id
-                        .remove(&req_id)
-                        .unwrap();
-                    let (req_len, _task) = self
-                        .current_waiting_reading_value_tasks
-                        .get_mut(&task_id)
-                        .unwrap();
-                    *req_len -= 1;
-                    log::debug!(
-                        "receive a req,current len: {} for task: {task_id}",
-                        *req_len
-                    );
-                    if *req_len == 0 {
-                        let (_, clause_task) = self
-                            .current_waiting_reading_value_tasks
-                            .remove(&task_id)
+                MemReqType::ClauseReadValue(_clause_id) => match self.pipeline_clause_value_read {
+                    true => {
+                        let task_id = self
+                            .current_waiting_value_memid_to_task_id
+                            .remove(&req_id)
                             .unwrap();
-                        self.clause_value_ready_queue.push_back(clause_task);
+                        let (req_len, _task) = self
+                            .current_waiting_reading_value_tasks
+                            .get_mut(&task_id)
+                            .unwrap();
+                        *req_len -= 1;
+                        log::debug!(
+                            "receive a req,current len: {} for task: {task_id}",
+                            *req_len
+                        );
+                        if *req_len == 0 {
+                            let (_, clause_task) = self
+                                .current_waiting_reading_value_tasks
+                                .remove(&task_id)
+                                .unwrap();
+                            self.clause_value_ready_queue.push_back(clause_task);
+                        }
                     }
-                }
+                    false => {
+                        let current_waiting = self.current_reading_value_task.as_mut().unwrap();
+                        current_waiting.unfinished_req_id.remove(&mem_req.msg.id);
+                        if current_waiting.unfinished_req_id.is_empty() {
+                            let current_waiting = self.current_reading_value_task.take().unwrap();
+                            self.clause_value_ready_queue
+                                .push_back(current_waiting.clause_task);
+                        };
+                    }
+                },
                 _ => unreachable!(),
             }
             busy = true;
@@ -341,7 +417,7 @@ mod test {
     use super::ClauseUnit;
 
     #[test]
-    fn test_clause_unit() {
+    fn test_clause_unit_no_pipe() {
         test_utils::init();
         let channel_builder = ChannelBuilder::new();
         let clause_task_port = channel_builder.sim_channel(10);
@@ -350,8 +426,72 @@ mod test {
         let mem_icnt_port = mem_icnt_port_pair.0;
         let private_cache_port_pair = channel_builder.in_out_port(10);
         let private_cache_port = private_cache_port_pair.0;
-        let cluase_unit =
-            ClauseUnit::new(clause_task_in, mem_icnt_port, private_cache_port, 0, 1, 0);
+        let cluase_unit = ClauseUnit::new(
+            clause_task_in,
+            mem_icnt_port,
+            private_cache_port,
+            0,
+            1,
+            0,
+            false,
+        );
+        let config = Config::default();
+        let context = SataccStatus::new(config);
+        let mut sim_runner = SimRunner::new(cluase_unit, context);
+        clause_task_port
+            .0
+            .send(IcntMsgWrapper {
+                msg: ClauseTask {
+                    watcher_id: 1,
+                    blocker_addr: 0,
+                    clause_data: Some(ClauseData {
+                        clause_id: 0,
+                        clause_addr: 0,
+                        clause_processing_time: 1,
+                        clause_value_addr: vec![1, 2, 3],
+                        clause_value_id: vec![1, 2, 3],
+                    }),
+                },
+                mem_target_port: 0,
+            })
+            .unwrap();
+        sim_runner.run().unwrap();
+        let req = mem_icnt_port_pair.1.in_port.recv().unwrap();
+        log::debug!("should be read data: {:?}", req);
+        mem_icnt_port_pair.1.out_port.send(req).unwrap();
+        sim_runner.run().unwrap();
+        // now private cache should receive 3 requests
+        let req1 = private_cache_port_pair.1.in_port.recv().unwrap();
+        let req2 = private_cache_port_pair.1.in_port.recv().unwrap();
+        let req3 = private_cache_port_pair.1.in_port.recv().unwrap();
+        log::debug!("should be read value: {:?} {:?} {:?}", req1, req2, req3);
+        private_cache_port_pair.1.out_port.send(req1).unwrap();
+        private_cache_port_pair.1.out_port.send(req2).unwrap();
+        private_cache_port_pair.1.out_port.send(req3).unwrap();
+
+        sim_runner.run().unwrap();
+        // now clause unit should receive 3 requests and finished the process
+    }
+
+    #[test]
+    fn test_clause_unit_with_pipe() {
+        test_utils::init();
+        let channel_builder = ChannelBuilder::new();
+        let clause_task_port = channel_builder.sim_channel(10);
+        let clause_task_in = clause_task_port.1;
+        let mem_icnt_port_pair = channel_builder.in_out_port(10);
+        let mem_icnt_port = mem_icnt_port_pair.0;
+        let private_cache_port_pair = channel_builder.in_out_port(10);
+        let private_cache_port = private_cache_port_pair.0;
+        let cluase_unit = ClauseUnit::new(
+            clause_task_in,
+            mem_icnt_port,
+            private_cache_port,
+            0,
+            1,
+            0,
+            true,
+        );
         let config = Config::default();
         let context = SataccStatus::new(config);
         let mut sim_runner = SimRunner::new(cluase_unit, context);

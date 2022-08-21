@@ -4,6 +4,7 @@ n_clauses = 1
 mems = 8
 icnt = 'Mesh'
 seq = false
+pipeline_clause_value_read = true
 ideal_icnt = false
 ideal_memory = false
 ideal_l3cache = false

@@ -46,6 +46,7 @@ impl WatcherInterface {
         num_clauses_per_watcher: usize,
         watcher_pe_id: usize,
         total_watchers: usize,
+        pipeline_clause_value_read: bool,
     ) -> Self {
         let (watcher_mem_sender, watcher_mem_receiver) = channel_builder.sim_channel(queue_size);
         let watcher_icnt_interface = InOutPort {
@@ -96,6 +97,7 @@ impl WatcherInterface {
                     watcher_pe_id,
                     total_watchers,
                     clause_pe_id,
+                    pipeline_clause_value_read,
                 );
                 (clause_task_sender, claause_mem_sender, clause)
             })
@@ -292,6 +294,7 @@ mod test {
             2,
             0,
             1,
+            true,
         );
         let mut config = Config::default();
         config.n_clauses = 2;
@@ -347,6 +350,7 @@ mod test {
             2,
             0,
             1,
+            true,
         );
         let mut config = Config::default();
         config.n_clauses = 2;
@@ -407,6 +411,7 @@ mod test {
             2,
             0,
             1,
+            true,
         );
         let mut config = Config::default();
         config.n_clauses = 2;

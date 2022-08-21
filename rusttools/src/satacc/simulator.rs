@@ -275,6 +275,7 @@ impl Simulator {
                     self.config.n_clauses,
                     watcher_pe_id,
                     self.config.n_watchers,
+                    self.config.pipeline_clause_value_read,
                 )
             })
             .collect::<Vec<_>>();
@@ -325,65 +326,24 @@ impl Simulator {
 
 #[cfg(test)]
 mod test {
-    use ramulator_wrapper::PresetConfigs;
 
     use crate::{
-        config::{CacheType, Config, DramType, IcntType, WatcherToClauseType},
+        config::Config,
         satacc::{
             satacc_minisat_task::{ClauseData, ClauseTask, SingleRoundTask, WatcherTask},
-            CacheConfig, SataccMinisatTask, SataccStatus,
+            SataccMinisatTask, SataccStatus,
         },
         sim::SimRunner,
         test_utils,
     };
 
-    use super::{RunMode, Simulator};
+    use super::Simulator;
 
     #[test]
     fn test_simulator() {
         test_utils::init();
 
-        let config = Config {
-            watcher_to_clause_type: WatcherToClauseType::Icnt,
-            n_watchers: 4,
-            n_clauses: 2,
-            mems: 8,
-            icnt: IcntType::Mesh,
-            seq: false,
-            ideal_memory: false,
-            ideal_l3cache: false,
-            ideal_icnt: false,
-            multi_port: 1,
-            dram_config: DramType::HBM,
-            watcher_to_clause_icnt: IcntType::Mesh,
-            watcher_to_writer_icnt: IcntType::Mesh,
-            num_writer_entry: 2,
-            num_writer_merge: 2,
-            single_watcher: false,
-            private_cache_size: 1,
-            l3_cache_size: 1,
-            channel_size: 16,
-            l3_cache_type: CacheType::Simple,
-            ramu_cache_config: PresetConfigs::HBM,
-            init_running_mode: RunMode::RealRoundGap,
-            private_cache_config: CacheConfig {
-                sets: 16,
-                associativity: 2,
-                block_size: 64,
-                channels: 1,
-                alway_hit: false,
-            },
-            l3_cache_config: CacheConfig {
-                sets: 16,
-                associativity: 2,
-                block_size: 64,
-                channels: 8,
-                alway_hit: false,
-            },
-            l1_hit_latency: 1,
-            l3_hit_latency: 15,
-            miss_latency: 120,
-        };
+        let config = Config::default();
         let simulator = Simulator::new_from_config(config.clone());
         let (task_sender, comp) = simulator.build(config.init_running_mode);
         let status = SataccStatus::new(config);

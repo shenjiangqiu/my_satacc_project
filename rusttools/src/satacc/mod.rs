@@ -21,7 +21,7 @@ pub enum ClauseAccessType {
     ReadClause(ClauseTask),
     ReadValue,
 }
-#[derive(Debug)]
+#[derive(Debug, EnumAsInner)]
 pub enum MemReqType {
     ClauseReadData(usize),
     ClauseReadValue(usize),
@@ -40,6 +40,7 @@ pub struct MemReq {
     pub req_type: MemReqType,
 }
 
+use enum_as_inner::EnumAsInner;
 pub use satacc_minisat_task::SataccMinisatTask;
 pub use simulator::Simulator;
 
