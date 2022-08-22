@@ -5,6 +5,7 @@ mems = 8
 icnt = 'Mesh'
 seq = false
 pipeline_clause_value_read = true
+value_miss_hit_l3 = true
 ideal_icnt = false
 ideal_memory = false
 ideal_l3cache = false

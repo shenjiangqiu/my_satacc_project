@@ -42,7 +42,7 @@ impl WatcherInterface {
         queue_size: usize,
         cache_config: &CacheConfig,
         hit_latency: usize,
-        miss_latency: usize,
+        private_cache_miss_latency: usize,
         num_clauses_per_watcher: usize,
         watcher_pe_id: usize,
         total_watchers: usize,
@@ -117,7 +117,7 @@ impl WatcherInterface {
                 out_port: private_cache_out.0,
             }],
             hit_latency,
-            miss_latency,
+            private_cache_miss_latency,
             CacheId::PrivateCache(watcher_pe_id),
         );
 

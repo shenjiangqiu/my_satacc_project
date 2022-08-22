@@ -255,7 +255,11 @@ impl Simulator {
                 &channel_builder,
                 ideal_icnt,
             );
-
+        let private_cache_miss_latency = if self.config.value_miss_hit_l3 {
+            self.config.l3_hit_latency
+        } else {
+            self.config.miss_latency
+        };
         // build watchers and clauses
         let watchers_interface = clause_base_port
             .into_iter()
@@ -271,7 +275,7 @@ impl Simulator {
                     self.config.channel_size,
                     &self.config.private_cache_config,
                     self.config.l1_hit_latency,
-                    self.config.l3_hit_latency, // the miss latency for l1 is the hit latency for l3
+                    private_cache_miss_latency, // the miss latency for l1 is the hit latency for l3
                     self.config.n_clauses,
                     watcher_pe_id,
                     self.config.n_watchers,

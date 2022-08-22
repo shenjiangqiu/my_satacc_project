@@ -122,6 +122,8 @@ where
         // from icnt to output
         while let Some((leaving_cycle, message)) = self.in_transit_messages.pop() {
             busy = true;
+            // updated should be true because the cycle is going and it will be updated
+            updated = true;
             if leaving_cycle > current_cycle {
                 self.in_transit_messages.push(message, leaving_cycle);
                 break;
@@ -129,7 +131,6 @@ where
                 let output_port = message.get_target_port();
                 match self.ports[output_port].out_port.send(message) {
                     Ok(_) => {
-                        updated = true;
                         log::debug!("send finished message to port {}", output_port);
                     }
                     Err(message) => {
