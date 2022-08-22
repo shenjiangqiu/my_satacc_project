@@ -92,7 +92,7 @@ impl SimComponent for Watcher {
                 let id = mem_meta_task.msg.id;
                 match self.cache_mem_icnt_sender.out_port.send(mem_meta_task) {
                     Ok(_) => {
-                        log::debug!("Watcher Receive task! {current_cycle}");
+                        tracing::debug!("Watcher Receive task! {current_cycle}");
 
                         context.statistics.watcher_statistics[self.watcher_pe_id]
                             .total_assignments += 1;
@@ -102,7 +102,7 @@ impl SimComponent for Watcher {
                     }
                     Err(_) => {
                         // cannot send to cache now
-                        log::debug!("cannot meta data request send to cache now");
+                        tracing::debug!("cannot meta data request send to cache now");
                         self.watcher_task_receiver.ret(watcher_task);
                         reason = IdleReason::CannotSendL3Cache;
                     }
@@ -129,7 +129,7 @@ impl SimComponent for Watcher {
                     }
                     Err(_mem_watcher_task) => {
                         // cannot send to cache now
-                        log::debug!("cannot send watcher data request send to cache now");
+                        tracing::debug!("cannot send watcher data request send to cache now");
                         self.meta_finished_queue.push_front(watcher_task);
                         reason = IdleReason::CannotSendL3Cache;
                     }
@@ -170,7 +170,7 @@ impl SimComponent for Watcher {
                     }
                     Err(_blocker_req) => {
                         // cannot send to cache now
-                        log::debug!("cannot send blocker request send to cache now");
+                        tracing::debug!("cannot send blocker request send to cache now");
                         self.single_watcher_task_queue.push_front(single_task);
                         reason = IdleReason::CannotSendPrivateCache;
                     }
@@ -222,7 +222,7 @@ impl SimComponent for Watcher {
                     }
                     Err(clause_task) => {
                         // cannot send to cache now
-                        log::debug!("cannot send clause to clause unit now");
+                        tracing::debug!("cannot send clause to clause unit now");
                         let clause_task = clause_task.msg;
                         self.single_watcher_process_finished_queue
                             .push_front(clause_task);
@@ -239,7 +239,7 @@ impl SimComponent for Watcher {
             match mem_req.msg.req_type {
                 MemReqType::WatcherReadMetaData => {
                     updated = true;
-                    log::debug!("Watcher Receive mem_req! {current_cycle}");
+                    tracing::debug!("Watcher Receive mem_req! {current_cycle}");
                     self.meta_finished_queue.push_back(
                         self.mem_req_id_to_watcher_task
                             .remove(&mem_req.msg.id)
@@ -249,7 +249,7 @@ impl SimComponent for Watcher {
                 }
                 MemReqType::WatcherReadData => {
                     updated = true;
-                    log::debug!("Watcher Receive mem_req! {current_cycle}");
+                    tracing::debug!("Watcher Receive mem_req! {current_cycle}");
                     self.data_finished_queue.push_back(
                         self.mem_req_id_to_watcher_task
                             .remove(&mem_req.msg.id)
@@ -263,7 +263,7 @@ impl SimComponent for Watcher {
         }
         // get the private cache return
         if let Ok(mem_req) = self.private_cache_receiver.recv() {
-            log::debug!("Watcher Receive mem_req private! {current_cycle}");
+            tracing::debug!("Watcher Receive mem_req private! {current_cycle}");
             self.total_ongoing_private_cache_reqs -= 1;
             busy = true;
             updated = true;
@@ -326,7 +326,9 @@ impl SimComponent for Watcher {
             }
         }
         if busy && !updated {
-            log::debug!("Watcher is busy! but not updated {current_cycle},idle reason:{reason:?}");
+            tracing::debug!(
+                "Watcher is busy! but not updated {current_cycle},idle reason:{reason:?}"
+            );
         }
         (busy, updated)
     }

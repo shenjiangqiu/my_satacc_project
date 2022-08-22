@@ -1,6 +1,5 @@
 use std::fs::File;
 
-use env_logger::{Env, Target};
 use serde::{Deserialize, Serialize};
 
 use crate::{
@@ -84,12 +83,7 @@ impl Simulator {
     /// get the simulator
     #[no_mangle]
     pub extern "C" fn get_simulator() -> *mut SimulatorWapper {
-        env_logger::Builder::from_env(Env::default().default_filter_or("info"))
-            .target(Target::Stdout)
-            .try_init()
-            .unwrap_or_else(|_e| {
-                log::error!("fail to set logger!");
-            });
+        tracing_subscriber::fmt::try_init().unwrap_or_default();
         let config = Config::from_config_file("satacc_config.toml").unwrap();
 
         let simulator = Self::new_from_config(config.clone());
@@ -125,25 +119,27 @@ impl Simulator {
                 Ok(_) => {
                     sim.total_rounds += 1;
                     if sim.total_rounds % 1000 == 0 {
-                        log::info!("total rounds: {}", sim.total_rounds);
+                        tracing::info!("total rounds: {}", sim.total_rounds);
                     }
                     return true;
                 }
                 Err(e) => {
                     sim.sim_runner.get_shared_status_mut().verbose_mode = true;
                     // run extra 100 cycle for log infomation
-                    log::error!("simluation start error, the remaining is the extra 100 cycles");
+                    tracing::error!(
+                        "simluation start error, the remaining is the extra 100 cycles"
+                    );
                     for _ in 0..100 {
                         match sim.sim_runner.run() {
                             Ok(_) => {
-                                log::error!("cant be dead lock and resume!");
+                                tracing::error!("cant be dead lock and resume!");
                             }
                             Err(e) => {
-                                log::error!("simulation error: {}", e);
+                                tracing::error!("simulation error: {}", e);
                             }
                         }
                     }
-                    log::error!("simulation error: {}", e);
+                    tracing::error!("simulation error: {}", e);
                     return false;
                 }
             }
@@ -162,7 +158,7 @@ impl Simulator {
             sim.sim_runner.get_sim_mut().current_running_mode = RunMode::RealRoundGap;
             match sim.sim_runner.run() {
                 Ok(_) => {
-                    log::info!(
+                    tracing::info!(
                         "finish simulator cycle:{}",
                         sim.sim_runner.get_current_cycle()
                     );
@@ -185,10 +181,7 @@ impl Simulator {
     /// run full simulation and will delete the task, do not use the task anymore!
     #[no_mangle]
     pub extern "C" fn run_full_expr(task: *mut SataccMinisatTask) -> bool {
-        env_logger::Builder::from_env(Env::default().default_filter_or("info"))
-            .target(Target::Stdout)
-            .try_init()
-            .unwrap_or_default();
+        tracing_subscriber::fmt::try_init().unwrap_or_default();
         let mut task = unsafe { Box::from_raw(task) };
         let config = Config {
             init_running_mode: RunMode::RealRoundGap,
@@ -206,12 +199,12 @@ impl Simulator {
             match sim_runner.run() {
                 Ok(_) => {}
                 Err(_) => {
-                    log::error!("simulation error!");
+                    tracing::error!("simulation error!");
                     return false;
                 }
             }
         }
-        log::info!(
+        tracing::info!(
             "simulator finished! total cycles: {}",
             sim_runner.get_current_cycle(),
         );
@@ -223,7 +216,7 @@ impl Simulator {
     }
     /// build the simulator
     pub fn build(&self, init_runing_mode: RunMode) -> (SimSender<SingleRoundTask>, TrailAndOthers) {
-        log::info!("build simulator with mode: {init_runing_mode:?}");
+        tracing::info!("build simulator with mode: {init_runing_mode:?}");
         let channel_builder = ChannelBuilder::new();
 
         // build the trail
@@ -378,6 +371,7 @@ mod test {
     }
     #[test]
     fn test_c_interface_single_round() {
+        test_utils::init();
         let simulator_wrapper = Simulator::get_simulator();
         let task_builder = SataccMinisatTask::create_empty_task();
         unsafe {

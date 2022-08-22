@@ -63,7 +63,7 @@ impl SimComponent for CacheWithRamulator {
             // if temp_send_blocked_req have value, first process it!
             if self.ramulator.available(req.addr, req.is_write) {
                 updated = true;
-                log::debug!("send blocked req to dram");
+                tracing::debug!("send blocked req to dram");
                 let tag = get_set_number_from_addr(
                     req.addr,
                     self.fast_cache.get_set_bit_len(),
@@ -91,7 +91,7 @@ impl SimComponent for CacheWithRamulator {
                 {
                     busy = true;
                     updated = true;
-                    log::debug!("recv req: {:?} at cycle: {current_cycle}", msg);
+                    tracing::debug!("recv req: {:?} at cycle: {current_cycle}", msg);
                     match self.fast_cache.access(msg.addr) {
                         AccessResult::Hit(tag) => {
                             match self.on_dram_reqs.get_mut(&tag) {
@@ -99,7 +99,7 @@ impl SimComponent for CacheWithRamulator {
                                     entry.push(msg);
                                 }
                                 None => {
-                                    log::debug!("hit");
+                                    tracing::debug!("hit");
                                     self.on_going_reqs
                                         .push(msg, current_cycle + self.hit_latency);
                                     shared_status.statistics.update_hit(&self.cache_id);
@@ -108,7 +108,7 @@ impl SimComponent for CacheWithRamulator {
                         }
                         AccessResult::Miss(tag) => {
                             shared_status.statistics.update_miss(&self.cache_id);
-                            log::debug!("miss at cycle: {current_cycle}");
+                            tracing::debug!("miss at cycle: {current_cycle}");
 
                             match self.on_dram_reqs.get_mut(&tag) {
                                 Some(entry) => {
@@ -123,7 +123,7 @@ impl SimComponent for CacheWithRamulator {
                                     } else {
                                         // cannot send to dram now
                                         // temporarily put it in the on_going_reqs
-                                        log::debug!("cannot send to dram now, store it in temp slot : {:?} at cycle: {current_cycle}", msg);
+                                        tracing::debug!("cannot send to dram now, store it in temp slot : {:?} at cycle: {current_cycle}", msg);
                                         self.temp_send_blocked_req = Some(msg);
                                     }
                                 }
@@ -149,11 +149,14 @@ impl SimComponent for CacheWithRamulator {
                     mem_target_port: watcher_id,
                 }) {
                     Ok(_) => {
-                        log::debug!("send req: {:?} at cycle: {current_cycle}", req_addr);
+                        tracing::debug!("send req: {:?} at cycle: {current_cycle}", req_addr);
                         busy = true;
                     }
                     Err(req) => {
-                        log::debug!("cannot send req: {:?} at cycle: {current_cycle}", req_addr);
+                        tracing::debug!(
+                            "cannot send req: {:?} at cycle: {current_cycle}",
+                            req_addr
+                        );
                         self.on_going_reqs.push(req.msg, leaving_cycle);
                         break;
                     }
@@ -166,11 +169,11 @@ impl SimComponent for CacheWithRamulator {
             busy = true;
             updated = true;
             let tag = self.ramulator.pop();
-            log::debug!("dram req: {:?} at cycle: {}", tag, current_cycle);
+            tracing::debug!("dram req: {:?} at cycle: {}", tag, current_cycle);
             match self.on_dram_reqs.remove(&tag) {
                 Some(mut entrys) => {
                     while let Some(req) = entrys.pop() {
-                        log::debug!(
+                        tracing::debug!(
                             "send drm req: {:?} to ongoing at cycle: {current_cycle}",
                             req
                         );
@@ -186,7 +189,7 @@ impl SimComponent for CacheWithRamulator {
         }
         self.ramulator.cycle();
         if busy && !updated {
-            log::debug!("no update at cycle: {current_cycle}");
+            tracing::debug!("no update at cycle: {current_cycle}");
         }
         (busy, updated)
     }

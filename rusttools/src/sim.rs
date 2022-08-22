@@ -139,7 +139,7 @@ where
                     self.current_cycle += 1;
                 }
                 (true, false) => {
-                    log::error!(
+                    tracing::error!(
                         "simulation is busy but not updated at cycle {}",
                         self.current_cycle
                     );

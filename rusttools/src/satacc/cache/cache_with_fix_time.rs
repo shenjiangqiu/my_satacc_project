@@ -62,7 +62,7 @@ impl SimComponent for CacheWithFixTime {
                     mem_target_port: _,
                 }) = in_port.recv()
                 {
-                    log::debug!("cache receive request {:?}", msg.id);
+                    tracing::debug!("cache receive request {:?}", msg.id);
                     match self.fast_cache.access(msg.addr) {
                         AccessResult::Hit(tag) => {
                             // if it's hit, if the tag is in the tag_to_reqs, means it's already in on_going_reqs, just add this req to tag_to_reqs
@@ -99,7 +99,7 @@ impl SimComponent for CacheWithFixTime {
                     updated = true;
                 }
             } else {
-                log::debug!("cache is busy with {} requests", self.on_going_reqs.len());
+                tracing::debug!("cache is busy with {} requests", self.on_going_reqs.len());
             }
         }
         // then check if there is any request in the on_going_reqs
@@ -118,7 +118,7 @@ impl SimComponent for CacheWithFixTime {
 
         while let Some(req) = self.ready_reqs.pop_front() {
             busy = true;
-            log::debug!("send req: {:?} at cycle: {current_cycle}", req.id);
+            tracing::debug!("send req: {:?} at cycle: {current_cycle}", req.id);
             let out_id = req.mem_id;
             let wathcer_id = req.watcher_pe_id;
             let req = IcntMsgWrapper {
@@ -131,17 +131,17 @@ impl SimComponent for CacheWithFixTime {
                 }
                 Err(e) => {
                     // cannot send to cache now
-                    log::debug!("cache cannot send back req because queue is full: {:?}", e);
+                    tracing::debug!("cache cannot send back req because queue is full: {:?}", e);
                     self.ready_reqs.push_front(e.msg);
                     break;
                 }
             }
         }
         if busy && !updated {
-            log::debug!("cache is busy but no update");
+            tracing::debug!("cache is busy but no update");
         }
         if !busy && !updated {
-            log::debug!("cache is idle");
+            tracing::debug!("cache is idle");
         }
         (busy, updated)
     }

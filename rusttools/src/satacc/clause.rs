@@ -98,7 +98,7 @@ impl SimComponent for ClauseUnit {
                 let id = mem_req.msg.id;
                 match self.mem_icnt_port.out_port.send(mem_req) {
                     Ok(_) => {
-                        log::debug!("ClauseUnit Receive task! {current_cycle}");
+                        tracing::debug!(current_cycle, "ClauseUnit Receive task! ");
 
                         self.mem_req_id_to_clause_task.insert(id, task.msg);
                         context.statistics.clause_statistics[self.watcher_pe_id].single_clause
@@ -110,8 +110,9 @@ impl SimComponent for ClauseUnit {
                     Err(_e) => {
                         // cannot send to cache now
                         // just ret the task so we don't need the target port
-                        log::debug!(
-                            "ClauseUnit Receive task! bug cannot send to mem {current_cycle}"
+                        tracing::debug!(
+                            current_cycle,
+                            "ClauseUnit Receive task! bug cannot send to mem "
                         );
                         self.clause_task_in.ret(task);
                         idle_reason = IdleReason::SendingL3;
@@ -119,7 +120,12 @@ impl SimComponent for ClauseUnit {
                 }
             }
         } else {
-            log::debug!("ClauseUnit cannot Receive task! {current_cycle}, total_clause_data_mem_ongoing: {},clause_data_ready_queue:len: {}",self.total_clause_data_mem_ongoing,self.clause_data_ready_queue.len());
+            tracing::debug!(
+                current_cycle,
+                self.total_clause_data_mem_ongoing,
+                clause_data_ready_queue_len = self.clause_data_ready_queue.len(),
+                "ClauseUnit cannot Receive task!"
+            );
         }
 
         // try get a task to start to read the clause value
@@ -143,11 +149,11 @@ impl SimComponent for ClauseUnit {
                             self.current_waiting_value_memid_to_task_id
                                 .insert(req.msg.id, self.current_task_id);
                         }
-                        log::debug!(
-                            "ClauseUnit add value reqs for task {} ,num reqs: {},req_ids: {:?}",
+                        tracing::debug!(
                             self.current_task_id,
                             req_len,
-                            mem_req.iter().map(|x| x.msg.id).collect::<Vec<usize>>()
+                            req_ids = mem_req.len(),
+                            "ClauseUnit add value reqs for task",
                         );
                         self.current_waiting_reading_value_reqs.extend(mem_req);
 
@@ -162,11 +168,12 @@ impl SimComponent for ClauseUnit {
                     }
                 } else {
                     busy = true;
-                    log::debug!(
-                    "cannot send value task because current_waiting_reading_value_tasks have len: {}",
-                    self.current_waiting_reading_value_tasks.len()
-                );
-                    // log::debug!(
+                    tracing::debug!(
+                        current_waiting_reading_value_tasks_len =
+                            self.current_waiting_reading_value_tasks.len(),
+                        "cannot send value task ",
+                    );
+                    // tracing::debug!(
                     //     "current_waiting_reading_value_tasks: {:?}",
                     //     self.current_waiting_reading_value_tasks
                     // );
@@ -207,8 +214,10 @@ impl SimComponent for ClauseUnit {
                             Ok(_) => {
                                 updated = true;
                                 self.total_private_mem_ongoing += 1;
-                                log::debug!(
-                                    "ClauseUnit Send private cache {req_id:?}! {current_cycle}"
+                                tracing::debug!(
+                                    req_id,
+                                    current_cycle,
+                                    "ClauseUnit Send private cache "
                                 );
                             }
                             Err(e) => {
@@ -216,8 +225,9 @@ impl SimComponent for ClauseUnit {
                                 // just ret the task so we don't need the target port
                                 // never ignore any value, that's a bug!
                                 self.current_waiting_reading_value_reqs.push_front(e);
-                                log::debug!(
-                                    "ClauseUnit cannot send read value to mem {current_cycle}"
+                                tracing::debug!(
+                                    current_cycle,
+                                    "ClauseUnit cannot send read value to mem "
                                 );
                                 idle_reason = IdleReason::SendingL1;
                             }
@@ -238,8 +248,9 @@ impl SimComponent for ClauseUnit {
                                 Err(e) => {
                                     // cannot send to cache now
                                     // just ret the task so we don't need the target port
-                                    log::debug!(
-                                        "ClauseUnit cannot send read value to mem {current_cycle}"
+                                    tracing::debug!(
+                                        current_cycle,
+                                        "ClauseUnit cannot send read value to mem "
                                     );
                                     reqs.waiting_to_send_reqs.push_front(e);
                                     idle_reason = IdleReason::SendingL1;
@@ -251,7 +262,7 @@ impl SimComponent for ClauseUnit {
             }
         } else {
             busy = true;
-            log::debug!(
+            tracing::debug!(
                 "ClauseUnit cannot send read value to private cache {current_cycle},\
                 total_private_mem_ongoing: {},\
                 clause_value_ready_queue:len: {}",
@@ -268,7 +279,7 @@ impl SimComponent for ClauseUnit {
                 self.current_processing_task = Some((finished_cycle, task));
             } else {
                 // finished
-                log::debug!("ClauseUnit finished task! {current_cycle}");
+                tracing::debug!(current_cycle, "ClauseUnit finished task! ");
             }
         }
         // then process the value ready task
@@ -283,7 +294,7 @@ impl SimComponent for ClauseUnit {
         // process memory ret
         if let Ok(mem_req) = self.mem_icnt_port.in_port.recv() {
             self.total_clause_data_mem_ongoing -= 1;
-            log::debug!("ClauseUnit Receive mem_req! {current_cycle}");
+            tracing::debug!(current_cycle, "ClauseUnit Receive mem_req! ");
             match mem_req.msg.req_type {
                 crate::satacc::MemReqType::ClauseReadData(_) => {
                     let clause_task = self
@@ -302,9 +313,10 @@ impl SimComponent for ClauseUnit {
         // process private cache ret
         if let Ok(mem_req) = self.private_cache_port.in_port.recv() {
             let req_id = mem_req.msg.id;
-            log::debug!(
-                "ClauseUnit Receive mem_req from private cache! id {} cycle {current_cycle}",
-                req_id
+            tracing::debug!(
+                req_id,
+                current_cycle,
+                "ClauseUnit Receive mem_req from private cache!"
             );
             self.total_private_mem_ongoing -= 1;
             match mem_req.msg.req_type {
@@ -319,10 +331,7 @@ impl SimComponent for ClauseUnit {
                             .get_mut(&task_id)
                             .unwrap();
                         *req_len -= 1;
-                        log::debug!(
-                            "receive a req,current len: {} for task: {task_id}",
-                            *req_len
-                        );
+                        tracing::debug!(req_len, task_id, "receive a req");
                         if *req_len == 0 {
                             let (_, clause_task) = self
                                 .current_waiting_reading_value_tasks
@@ -378,18 +387,20 @@ impl SimComponent for ClauseUnit {
             }
         }
         if busy && !updated {
-            log::debug!(
-                "ClauseUnit is busy! but not updated {current_cycle}, idle_reason: {idle_reason:?}",
+            tracing::debug!(
+                current_cycle,
+                ?idle_reason,
+                "ClauseUnit is busy! but not updated",
             );
             if context.verbose_mode {
-                log::error!(
+                tracing::error!(
                     "current_waiting_reading_value_tasks: {:?}",
                     self.current_waiting_reading_value_tasks
                         .iter()
                         .map(|(k, v)| (k, v.0))
                         .collect::<Vec<_>>()
                 );
-                log::error!(
+                tracing::error!(
                     "current_waiting_value_req_queue mem_id: {:?}",
                     self.current_waiting_reading_value_reqs
                         .iter()
@@ -457,14 +468,14 @@ mod test {
             .unwrap();
         sim_runner.run().unwrap();
         let req = mem_icnt_port_pair.1.in_port.recv().unwrap();
-        log::debug!("should be read data: {:?}", req);
+        tracing::debug!(?req, "should be read data");
         mem_icnt_port_pair.1.out_port.send(req).unwrap();
         sim_runner.run().unwrap();
         // now private cache should receive 3 requests
         let req1 = private_cache_port_pair.1.in_port.recv().unwrap();
         let req2 = private_cache_port_pair.1.in_port.recv().unwrap();
         let req3 = private_cache_port_pair.1.in_port.recv().unwrap();
-        log::debug!("should be read value: {:?} {:?} {:?}", req1, req2, req3);
+        tracing::debug!("should be read value: {:?} {:?} {:?}", req1, req2, req3);
         private_cache_port_pair.1.out_port.send(req1).unwrap();
         private_cache_port_pair.1.out_port.send(req2).unwrap();
         private_cache_port_pair.1.out_port.send(req3).unwrap();
@@ -514,14 +525,14 @@ mod test {
             .unwrap();
         sim_runner.run().unwrap();
         let req = mem_icnt_port_pair.1.in_port.recv().unwrap();
-        log::debug!("should be read data: {:?}", req);
+        tracing::debug!("should be read data: {:?}", req);
         mem_icnt_port_pair.1.out_port.send(req).unwrap();
         sim_runner.run().unwrap();
         // now private cache should receive 3 requests
         let req1 = private_cache_port_pair.1.in_port.recv().unwrap();
         let req2 = private_cache_port_pair.1.in_port.recv().unwrap();
         let req3 = private_cache_port_pair.1.in_port.recv().unwrap();
-        log::debug!("should be read value: {:?} {:?} {:?}", req1, req2, req3);
+        tracing::debug!("should be read value: {:?} {:?} {:?}", req1, req2, req3);
         private_cache_port_pair.1.out_port.send(req1).unwrap();
         private_cache_port_pair.1.out_port.send(req2).unwrap();
         private_cache_port_pair.1.out_port.send(req3).unwrap();

@@ -44,7 +44,7 @@ impl SimComponent for Trail {
                     }
                     Err(watcher_task) => {
                         current_task.ret_task(watcher_task);
-                        log::debug!("send task to watcher {} failed", watcher_unit_id);
+                        tracing::debug!("send task to watcher {} failed", watcher_unit_id);
                     }
                 }
             } else {
@@ -65,7 +65,7 @@ impl SimComponent for Trail {
             }
         }
         if busy && !updated {
-            log::debug!("trail is busy but not updated");
+            tracing::debug!("trail is busy but not updated");
         }
         (busy, updated)
     }

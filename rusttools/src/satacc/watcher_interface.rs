@@ -155,7 +155,7 @@ impl SimComponent for WatcherInterface {
                 .get_inner_clause_pe_id(self.num_clauses_per_watcher);
             match self.clause_task_senders[id].send(clause_task) {
                 Ok(_) => {
-                    log::debug!("WatcherInterface Send task to clause:{id}! {current_cycle}");
+                    tracing::debug!("WatcherInterface Send task to clause:{id}! {current_cycle}");
                     updated = true;
                 }
                 Err(clause_task) => {
@@ -169,7 +169,7 @@ impl SimComponent for WatcherInterface {
                 MemReqType::ClauseReadData(clause_inner_id) => {
                     match self.clause_mem_senders[clause_inner_id].send(mem_req) {
                         Ok(_) => {
-                            log::debug!(
+                            tracing::debug!(
                                 "WatcherInterface Send mem req to clause:{clause_inner_id}! {current_cycle}",
                             );
                             updated = true;
@@ -179,18 +179,19 @@ impl SimComponent for WatcherInterface {
                         }
                     }
                 }
-                MemReqType::WatcherReadMetaData | MemReqType::WatcherReadData => match self
-                    .watcher_mem_sender
-                    .send(mem_req)
-                {
-                    Ok(_) => {
-                        log::debug!("WatcherInterface Send mem req to watcher! {current_cycle}");
-                        updated = true;
+                MemReqType::WatcherReadMetaData | MemReqType::WatcherReadData => {
+                    match self.watcher_mem_sender.send(mem_req) {
+                        Ok(_) => {
+                            tracing::debug!(
+                                "WatcherInterface Send mem req to watcher! {current_cycle}"
+                            );
+                            updated = true;
+                        }
+                        Err(mem_req) => {
+                            self.mem_icnt_interface_receiver.ret(mem_req);
+                        }
                     }
-                    Err(mem_req) => {
-                        self.mem_icnt_interface_receiver.ret(mem_req);
-                    }
-                },
+                }
                 _ => unreachable!(),
             }
         }
@@ -198,7 +199,7 @@ impl SimComponent for WatcherInterface {
         if let Ok(mem_req) = self.private_cache_out_receiver.recv() {
             busy = true;
             let msg_id = mem_req.msg.id;
-            log::debug!(
+            tracing::debug!(
                 "WatcherInterface Recv mem req from private cache! id: {} cycle: {current_cycle}",
                 mem_req.msg.id,
             );
@@ -206,7 +207,7 @@ impl SimComponent for WatcherInterface {
                 MemReqType::ClauseReadValue(clause_inner_id) => {
                     match self.clause_private_cache_senders[clause_inner_id].send(mem_req) {
                         Ok(_) => {
-                            log::debug!(
+                            tracing::debug!(
                                 "WatcherInterface Send mem req id {msg_id} to clause:{clause_inner_id}! {current_cycle}",
                             );
                             updated = true;
@@ -219,7 +220,7 @@ impl SimComponent for WatcherInterface {
                 MemReqType::WatcherReadBlocker => {
                     match self.watcher_private_cache_sender.send(mem_req) {
                         Ok(_) => {
-                            log::debug!("WatcherInterface Send mem req to watcher! id: {msg_id} cycle: {current_cycle}");
+                            tracing::debug!("WatcherInterface Send mem req to watcher! id: {msg_id} cycle: {current_cycle}");
                             updated = true;
                         }
                         Err(mem_req) => {
@@ -242,7 +243,7 @@ impl SimComponent for WatcherInterface {
         let busy = busy || c_busy;
         let updated = updated || c_update;
         if busy && !updated {
-            log::debug!("WatcherInterface is busy but not updated! {current_cycle}");
+            tracing::debug!("WatcherInterface is busy but not updated! {current_cycle}");
         }
         (busy, updated)
         // (
@@ -311,13 +312,13 @@ mod test {
             .unwrap();
         sim_runner.run().unwrap();
         let req = icnt_port_base.in_port.recv().unwrap();
-        log::debug!("{:?}", req);
+        tracing::debug!("{:?}", req);
         // send it back
         icnt_port_base.out_port.send(req).unwrap();
         sim_runner.run().unwrap();
         // the watcher will send a mem req for watcher data
         let req = icnt_port_base.in_port.recv().unwrap();
-        log::debug!("{:?}", req);
+        tracing::debug!("{:?}", req);
         // send it back
         icnt_port_base.out_port.send(req).unwrap();
         sim_runner.run().unwrap();
@@ -372,13 +373,13 @@ mod test {
             .unwrap();
         sim_runner.run().unwrap();
         let req = icnt_port_base.in_port.recv().unwrap();
-        log::debug!("{:?}", req);
+        tracing::debug!("{:?}", req);
         // send it back
         icnt_port_base.out_port.send(req).unwrap();
         sim_runner.run().unwrap();
         // the watcher will send a mem req for watcher data
         let req = icnt_port_base.in_port.recv().unwrap();
-        log::debug!("{:?}", req);
+        tracing::debug!("{:?}", req);
         // send it back
         icnt_port_base.out_port.send(req).unwrap();
         sim_runner.run().unwrap();
@@ -439,26 +440,26 @@ mod test {
             .unwrap();
         sim_runner.run().unwrap();
         let req = icnt_port_base.in_port.recv().unwrap();
-        log::debug!("{:?}", req);
+        tracing::debug!("{:?}", req);
         // send it back
         icnt_port_base.out_port.send(req).unwrap();
         sim_runner.run().unwrap();
         // the watcher will send a mem req for watcher data
         let req = icnt_port_base.in_port.recv().unwrap();
-        log::debug!("{:?}", req);
+        tracing::debug!("{:?}", req);
         // send it back
         icnt_port_base.out_port.send(req).unwrap();
         sim_runner.run().unwrap();
         // because there are one clause task, so it will read the private cache,
         // and it will send the request to the clause unit.
         let req = task_port_base.in_port.recv().unwrap();
-        log::debug!("{:?}", req);
+        tracing::debug!("{:?}", req);
         // send it back
         task_port_base.out_port.send(req).unwrap();
         sim_runner.run().unwrap();
         // now the clause unit will receive the task, and it will read the clause
         let req = icnt_port_base.in_port.recv().unwrap();
-        log::debug!("{:?}", req);
+        tracing::debug!("{:?}", req);
         // send it back
         icnt_port_base.out_port.send(req).unwrap();
         sim_runner.run().unwrap();

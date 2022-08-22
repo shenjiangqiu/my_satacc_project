@@ -114,7 +114,7 @@ where
                     // self.in_transit_messages.push(message, current_cycle + 1);
                     busy = true;
                     updated = true;
-                    log::debug!("recv message from port {}", input_port);
+                    tracing::debug!("recv message from port {}", input_port);
                 }
             }
         }
@@ -131,10 +131,10 @@ where
                 let output_port = message.get_target_port();
                 match self.ports[output_port].out_port.send(message) {
                     Ok(_) => {
-                        log::debug!("send finished message to port {}", output_port);
+                        tracing::debug!("send finished message to port {}", output_port);
                     }
                     Err(message) => {
-                        log::debug!(
+                        tracing::debug!(
                             "send failed message to port {} with message: {message:?}",
                             output_port
                         );
@@ -150,7 +150,7 @@ where
             false => context.statistics.icnt_statistics.idle_cycle += 1,
         }
         if busy && !updated {
-            log::debug!("icnt is busy but not updated");
+            tracing::debug!("icnt is busy but not updated");
         }
         (busy, updated)
     }
