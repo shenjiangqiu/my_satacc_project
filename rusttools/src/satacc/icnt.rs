@@ -109,9 +109,9 @@ where
                         .add(cycle_to_go);
                     context.statistics.icnt_statistics.total_messages += 1;
 
-                    // self.in_transit_messages
-                    //     .push(message, current_cycle + cycle_to_go);
-                    self.in_transit_messages.push(message, current_cycle + 1);
+                    self.in_transit_messages
+                        .push(message, current_cycle + cycle_to_go);
+                    // self.in_transit_messages.push(message, current_cycle + 1);
                     busy = true;
                     updated = true;
                     log::debug!("recv message from port {}", input_port);
