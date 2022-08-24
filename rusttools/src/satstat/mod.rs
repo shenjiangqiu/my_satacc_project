@@ -1,13 +1,10 @@
-use std::{
-    collections::BTreeMap,
-    ffi::{CStr, CString},
-};
+use std::collections::BTreeMap;
 
 use ndarray::array;
 use ndarray_stats::histogram::{Bins, Edges, Grid, Histogram};
 use serde::Serialize;
 
-use crate::{init_tracing, test_utils};
+use crate::init_tracing;
 
 /// the sat runtime statistics
 pub struct Satstat {
@@ -110,6 +107,7 @@ impl Satstat {
     #[no_mangle]
     pub extern "C" fn new_satstat_pointer() -> *mut Satstat {
         init_tracing();
+        tracing::info!("new_satstat_pointer");
         Box::into_raw(Box::new(Satstat::default()))
     }
     #[no_mangle]
