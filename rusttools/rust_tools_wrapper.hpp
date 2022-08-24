@@ -39,8 +39,8 @@ class SimulatorWapper {
 public:
   SimulatorWapper();
   ~SimulatorWapper();
-  void finish_simulator();
-  void run_single_task(SataccMinisatTaskWrapper &task);
+  bool finish_simulator();
+  bool run_single_task(SataccMinisatTaskWrapper &task);
 
 private:
   sjqrusttools::SimulatorWapper *const sim;

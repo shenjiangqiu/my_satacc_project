@@ -19,11 +19,11 @@ void SatStatsWrapper::show_data() const { sjqrusttools::show_data(satstats); }
 // simulator wrapper
 SimulatorWapper::SimulatorWapper() : sim(sjqrusttools::get_simulator()) {}
 SimulatorWapper::~SimulatorWapper() { sjqrusttools::release_simulator(sim); }
-void SimulatorWapper::finish_simulator() {
-  sjqrusttools::finish_simulator(sim);
+bool SimulatorWapper::finish_simulator() {
+  return sjqrusttools::finish_simulator(sim);
 }
-void SimulatorWapper::run_single_task(SataccMinisatTaskWrapper &task) {
-  sjqrusttools::run_single_task(task.task, sim);
+bool SimulatorWapper::run_single_task(SataccMinisatTaskWrapper &task) {
+  return sjqrusttools::run_single_task(task.task, sim);
 }
 
 // satacc minisat task wrapper
