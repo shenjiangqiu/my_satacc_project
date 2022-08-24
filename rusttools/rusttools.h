@@ -159,9 +159,9 @@ void delete_satstat_pointer(Satstat *satstat);
 
 void end_decision(Satstat *self, bool conflict);
 
-/// finish the simulation, this will consume the simulator
+/// finish the simulation, this will not consume any point, you can use it later
 /// return still ok?
-bool finish_simulator(SataccMinisatTask *task, SimulatorWapper *sim);
+bool finish_simulator(SimulatorWapper *sim);
 
 /// get the simulator
 SimulatorWapper *get_simulator();
@@ -172,7 +172,11 @@ int32_t get_y(const Point *self);
 
 Satstat *new_satstat_pointer();
 
-/// run full simulation and will delete the task, do not use the task anymore!
+void release_simulator(SimulatorWapper *sim);
+
+void release_task(SataccMinisatTask *task);
+
+/// run full simulation and will  not delete the task
 bool run_full_expr(SataccMinisatTask *task);
 
 /// run a single round of simulation,

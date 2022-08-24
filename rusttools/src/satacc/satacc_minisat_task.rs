@@ -185,6 +185,14 @@ impl SataccMinisatTask {
             assignments: VecDeque::new(),
         });
     }
+
+    #[no_mangle]
+    pub extern "C" fn release_task(task: *mut Self) {
+        unsafe {
+            Box::from_raw(task);
+        }
+    }
+
     #[no_mangle]
     pub extern "C" fn add_watcher_task(
         &mut self,

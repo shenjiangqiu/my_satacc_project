@@ -145,15 +145,12 @@ impl Simulator {
             }
         }
     }
-    /// finish the simulation, this will consume the simulator
+    /// finish the simulation, this will not consume any point, you can use it later
     /// return still ok?
     #[no_mangle]
-    pub extern "C" fn finish_simulator(
-        task: *mut SataccMinisatTask,
-        sim: *mut SimulatorWapper,
-    ) -> bool {
+    pub extern "C" fn finish_simulator(sim: *mut SimulatorWapper) -> bool {
         unsafe {
-            let mut sim: SimulatorWapper = *Box::from_raw(sim);
+            let sim = &mut *sim;
 
             sim.sim_runner.get_sim_mut().current_running_mode = RunMode::RealRoundGap;
             match sim.sim_runner.run() {
@@ -162,13 +159,13 @@ impl Simulator {
                         "finish simulator cycle:{}",
                         sim.sim_runner.get_current_cycle()
                     );
-                    let (_, mut status, cycle) = sim.sim_runner.into_inner();
-                    status.statistics.total_cycle = cycle;
-                    status.save_statistics("statistics.json");
-                    serde_json::to_writer_pretty(File::create("cycle.json").unwrap(), &cycle)
-                        .unwrap();
-                    // release the task builder
-                    let _task = Box::from_raw(task);
+                    // let (_, mut status, cycle) = sim.sim_runner.into_inner();
+                    // status.statistics.total_cycle = cycle;
+                    // status.save_statistics("statistics.json");
+                    // serde_json::to_writer_pretty(File::create("cycle.json").unwrap(), &cycle)
+                    //     .unwrap();
+                    // // release the task builder
+                    // let _task = Box::from_raw(task);
                     return true;
                 }
                 Err(_) => {
@@ -177,12 +174,18 @@ impl Simulator {
             }
         }
     }
+    #[no_mangle]
+    pub extern "C" fn release_simulator(sim: *mut SimulatorWapper) {
+        unsafe {
+            let _sim = Box::from_raw(sim);
+        }
+    }
 
-    /// run full simulation and will delete the task, do not use the task anymore!
+    /// run full simulation and will  not delete the task
     #[no_mangle]
     pub extern "C" fn run_full_expr(task: *mut SataccMinisatTask) -> bool {
         tracing_subscriber::fmt::try_init().unwrap_or_default();
-        let mut task = unsafe { Box::from_raw(task) };
+        let task = unsafe { &mut *task };
         let config = Config {
             init_running_mode: RunMode::RealRoundGap,
             ..Config::from_config_file("satacc_config.toml").unwrap()
@@ -382,7 +385,9 @@ mod test {
             unowned_task_builder.add_single_watcher_clause_value_addr(0, 0);
         }
         Simulator::run_single_task(task_builder, simulator_wrapper);
-        Simulator::finish_simulator(task_builder, simulator_wrapper);
+        Simulator::finish_simulator(simulator_wrapper);
+        Simulator::release_simulator(simulator_wrapper);
+        SataccMinisatTask::release_task(task_builder);
     }
 
     #[test]
@@ -396,5 +401,6 @@ mod test {
             unowned_task_builder.add_single_watcher_clause_value_addr(0, 0);
         }
         Simulator::run_full_expr(task_builder);
+        SataccMinisatTask::release_task(task_builder);
     }
 }
