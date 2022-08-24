@@ -69,6 +69,9 @@ enum class WatcherToClauseType {
 /// - it contains many decisions in [`SingleRoundTask`]
 struct SataccMinisatTask;
 
+/// the sat runtime statistics
+struct Satstat;
+
 struct SimulatorWapper;
 
 struct CacheConfig {
@@ -89,6 +92,8 @@ struct Config {
   size_t mems;
   IcntType icnt;
   bool seq;
+  bool pipeline_clause_value_read;
+  bool value_miss_hit_l3;
   bool ideal_icnt;
   bool ideal_memory;
   bool ideal_l3cache;
@@ -150,6 +155,10 @@ Config config_from_file(const char *path);
 /// this will create a simulator task object, do not free it, it will be freed by calling `run_full_expr`
 SataccMinisatTask *create_empty_task();
 
+void delete_satstat_pointer(Satstat *satstat);
+
+void end_decision(Satstat *self, bool conflict);
+
 /// finish the simulation, this will consume the simulator
 /// return still ok?
 bool finish_simulator(SataccMinisatTask *task, SimulatorWapper *sim);
@@ -161,6 +170,8 @@ int32_t get_x(const Point *self);
 
 int32_t get_y(const Point *self);
 
+Satstat *new_satstat_pointer();
+
 /// run full simulation and will delete the task, do not use the task anymore!
 bool run_full_expr(SataccMinisatTask *task);
 
@@ -169,6 +180,9 @@ bool run_full_expr(SataccMinisatTask *task);
 /// return still ok?
 bool run_single_task(SataccMinisatTask *task, SimulatorWapper *sim);
 
+/// called every time a propagation occurs, that is, one watcher
+void satstat_add_watcher(Satstat *self, size_t num_clause_total, size_t num_clause_read);
+
 void say_hello(const Point *point, const Rec *rect);
 
 void set_x(Point *self, int32_t x);
@@ -176,6 +190,8 @@ void set_x(Point *self, int32_t x);
 void set_y(Point *self, int32_t y);
 
 void show_config(const Config *self);
+
+void show_data(const Satstat *self);
 
 void start_new_assgin(SataccMinisatTask *self);
 

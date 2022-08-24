@@ -5,12 +5,16 @@ pub mod config;
 #[macro_use]
 pub(self) mod macros;
 pub mod satacc;
+pub mod satstat;
 pub mod sim;
 pub(self) mod test_utils;
 // from now all code are for test
 #[no_mangle]
 pub extern "C" fn say_hello(point: &Point, rect: &Rec) {
     println!("Hello, world! :{point:?} {rect:?}");
+}
+pub fn init_tracing() {
+    tracing_subscriber::fmt::try_init().unwrap_or_default();
 }
 
 #[repr(C)]
