@@ -183,6 +183,8 @@ bool run_single_task(SataccMinisatTask *task, SimulatorWapper *sim);
 /// called every time a propagation occurs, that is, one watcher
 void satstat_add_watcher(Satstat *self, size_t num_clause_total, size_t num_clause_read);
 
+void save_data(const Satstat *self);
+
 void say_hello(const Point *point, const Rec *rect);
 
 void set_x(Point *self, int32_t x);

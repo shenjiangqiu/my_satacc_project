@@ -1,4 +1,4 @@
-use std::collections::BTreeMap;
+use std::{collections::BTreeMap, fs::File};
 
 use ndarray::array;
 use ndarray_stats::histogram::{Bins, Edges, Grid, Histogram};
@@ -88,11 +88,6 @@ impl Default for Satstat {
         }
     }
 }
-#[derive(Serialize)]
-struct HistogramData {
-    bins: Vec<usize>,
-    counts: Vec<usize>,
-}
 
 #[derive(Serialize)]
 struct FinalResult {
@@ -101,7 +96,7 @@ struct FinalResult {
     total_clauses: usize,
     total_watchers: usize,
     total_clauses_with_data: usize,
-    histograms: BTreeMap<String, HistogramData>,
+    histograms: BTreeMap<String, Vec<usize>>,
 }
 impl Satstat {
     #[no_mangle]
@@ -151,6 +146,73 @@ impl Satstat {
         let grid = self.clauses_per_watcher.grid();
         let clauses_per_watcher_count = self.clauses_per_watcher.counts();
         tracing::info!(?grid, ?clauses_per_watcher_count);
+    }
+    fn add_to_final_result(
+        name: impl Into<String>,
+        value: &Histogram<usize>,
+        final_result: &mut BTreeMap<String, Vec<usize>>,
+    ) {
+        let result = value.counts().iter().cloned().collect::<Vec<_>>();
+        final_result.insert(name.into(), result);
+    }
+    #[no_mangle]
+    pub extern "C" fn save_data(&self) {
+        let mut final_histograms = BTreeMap::new();
+        Self::add_to_final_result(
+            "clauses_per_watcher",
+            &self.clauses_per_watcher,
+            &mut final_histograms,
+        );
+        Self::add_to_final_result(
+            "clause_read_per_watcher",
+            &self.clause_read_per_watcher,
+            &mut final_histograms,
+        );
+        Self::add_to_final_result(
+            "watchers_per_decision",
+            &self.watchers_per_decision,
+            &mut final_histograms,
+        );
+        Self::add_to_final_result(
+            "clause_read_per_decision",
+            &self.clause_read_per_decision,
+            &mut final_histograms,
+        );
+        Self::add_to_final_result(
+            "clauses_per_decision",
+            &self.clauses_per_decision,
+            &mut final_histograms,
+        );
+        Self::add_to_final_result(
+            "decisions_per_conflict",
+            &self.decisions_per_conflict,
+            &mut final_histograms,
+        );
+        Self::add_to_final_result(
+            "watchers_per_conflict",
+            &self.watchers_per_conflict,
+            &mut final_histograms,
+        );
+        Self::add_to_final_result(
+            "clauses_per_conflict",
+            &self.clauses_per_conflict,
+            &mut final_histograms,
+        );
+        Self::add_to_final_result(
+            "clauses_per_conflict_with_data",
+            &self.clauses_per_conflict_with_data,
+            &mut final_histograms,
+        );
+        let final_result = FinalResult {
+            total_conflicts: self.total_conflicts,
+            total_decisions: self.total_decisions,
+            total_clauses: self.total_clauses,
+            total_watchers: self.total_watchers,
+            total_clauses_with_data: self.total_clauses_with_data,
+            histograms: final_histograms,
+        };
+        let mut file = File::create("final_result_histo.json").unwrap();
+        serde_json::to_writer_pretty(&mut file, &final_result).unwrap();
     }
     /// called every time a propagation occurs, that is, one watcher
     #[no_mangle]
@@ -223,7 +285,7 @@ mod test {
     use ndarray::array;
     use ndarray_stats::histogram::{Bins, Edges, Grid, Histogram};
 
-    use crate::test_utils::init;
+    use crate::{satacc, test_utils::init};
 
     #[test]
     fn test_histogram() {
@@ -251,5 +313,6 @@ mod test {
         satstat.satstat_add_watcher(20, 3);
         satstat.end_decision(true);
         satstat.show_data();
+        satstat.save_data();
     }
 }
