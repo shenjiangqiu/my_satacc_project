@@ -11,11 +11,6 @@ set(CMAKE_CXX_FLAGS_DEBUG "-g -O0")
 include(FetchContent)
 
 FetchContent_Declare(
-    Corrosion
-    GIT_REPOSITORY https://github.com/corrosion-rs/corrosion.git
-    GIT_TAG v0.2.1 # Optionally specify a commit hash, version tag or branch here
-)
-FetchContent_Declare(
     fmt
     GIT_REPOSITORY https://github.com/fmtlib/fmt
 )
@@ -26,12 +21,9 @@ FetchContent_Declare(
 
 )
 
-FetchContent_MakeAvailable(Corrosion)
 FetchContent_MakeAvailable(fmt)
 FetchContent_MakeAvailable(catch2)
-corrosion_import_crate(MANIFEST_PATH rusttools/Cargo.toml)
-target_include_directories(rusttools INTERFACE ${CMAKE_CURRENT_SOURCE_DIR}/rusttools)
-
+add_subdirectory(rusttools)
 add_subdirectory(sjqutils)
 add_subdirectory(mem_req_interface)
 add_subdirectory(minisat_utils)
