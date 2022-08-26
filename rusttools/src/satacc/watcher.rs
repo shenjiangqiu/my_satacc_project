@@ -29,7 +29,7 @@ pub struct Watcher {
     mem_req_id_to_clause_task: BTreeMap<usize, ClauseTask>,
     total_ongoing_meta_mem_reqs: usize,
     total_ongoing_data_mem_reqs: usize,
-    total_ongoing_private_cache_reqs: usize,
+    total_blocker_requests_ongoing: usize,
 }
 
 impl Watcher {
@@ -60,7 +60,7 @@ impl Watcher {
             mem_req_id_to_clause_task: BTreeMap::new(),
             total_ongoing_meta_mem_reqs: 0,
             total_ongoing_data_mem_reqs: 0,
-            total_ongoing_private_cache_reqs: 0,
+            total_blocker_requests_ongoing: 0,
         }
     }
 }
@@ -151,22 +151,25 @@ impl SimComponent for Watcher {
         }
 
         // then process the single watcher tasks
-        if self.total_ongoing_private_cache_reqs < 256
+        if self.total_blocker_requests_ongoing < 256
             && self.single_watcher_value_finished_queue.len() < 256
         {
             if let Some(single_task) = self.single_watcher_task_queue.pop_front() {
                 let blocker_req = single_task.get_blocker_req(self.total_watchers, context);
+                let addr = blocker_req.addr;
+                let mem_id = ((addr >> 6) & ((1 << 3) - 1)) as usize;
+
                 let id = blocker_req.id;
                 busy = true;
-                match self.private_cache_sender.send(IcntMsgWrapper {
+                match self.cache_mem_icnt_sender.out_port.send(IcntMsgWrapper {
                     msg: blocker_req,
-                    mem_target_port: 0,
+                    mem_target_port: self.total_watchers + mem_id,
                 }) {
                     Ok(_) => {
                         updated = true;
 
                         self.mem_req_id_to_clause_task.insert(id, single_task);
-                        self.total_ongoing_private_cache_reqs += 1;
+                        self.total_blocker_requests_ongoing += 1;
                     }
                     Err(_blocker_req) => {
                         // cannot send to cache now
@@ -257,17 +260,6 @@ impl SimComponent for Watcher {
                     );
                     self.total_ongoing_data_mem_reqs -= 1;
                 }
-
-                _ => unreachable!(),
-            }
-        }
-        // get the private cache return
-        if let Ok(mem_req) = self.private_cache_receiver.recv() {
-            tracing::debug!("Watcher Receive mem_req private! {current_cycle}");
-            self.total_ongoing_private_cache_reqs -= 1;
-            busy = true;
-            updated = true;
-            match mem_req.msg.req_type {
                 MemReqType::WatcherReadBlocker => {
                     self.single_watcher_value_finished_queue.push_back(
                         self.mem_req_id_to_clause_task
@@ -275,8 +267,27 @@ impl SimComponent for Watcher {
                             .unwrap(),
                     );
                 }
+
                 _ => unreachable!(),
             }
+        }
+        // get the private cache return
+        if let Ok(_mem_req) = self.private_cache_receiver.recv() {
+            // tracing::debug!("Watcher Receive mem_req private! {current_cycle}");
+            // self.total_ongoing_private_cache_reqs -= 1;
+            // busy = true;
+            // updated = true;
+            // match mem_req.msg.req_type {
+            //     MemReqType::WatcherReadBlocker => {
+            //         self.single_watcher_value_finished_queue.push_back(
+            //             self.mem_req_id_to_clause_task
+            //                 .remove(&mem_req.msg.id)
+            //                 .unwrap(),
+            //         );
+            //     }
+            //     _ => unreachable!(),
+            // }
+            unreachable!();
         }
 
         match updated {

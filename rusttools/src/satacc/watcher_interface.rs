@@ -22,9 +22,8 @@ pub struct WatcherInterface {
     // internal ports
     watcher_mem_sender: SimSender<IcntMsgWrapper<MemReq>>,
     clause_mem_senders: Vec<SimSender<IcntMsgWrapper<MemReq>>>,
-    watcher_private_cache_sender: SimSender<IcntMsgWrapper<MemReq>>,
-    clause_private_cache_senders: Vec<SimSender<IcntMsgWrapper<MemReq>>>,
-
+    // watcher_private_cache_sender: SimSender<IcntMsgWrapper<MemReq>>,
+    // clause_private_cache_senders: Vec<SimSender<IcntMsgWrapper<MemReq>>>,
     clause_task_senders: Vec<SimSender<IcntMsgWrapper<ClauseTask>>>,
 
     // private cache
@@ -131,8 +130,8 @@ impl WatcherInterface {
             clause_task_senders,
             private_cache,
             private_cache_out_receiver: private_cache_out.1,
-            watcher_private_cache_sender: watcher_private_cache_in.0,
-            clause_private_cache_senders: clauses_private_cache_in.0,
+            // watcher_private_cache_sender: watcher_private_cache_in.0,
+            // clause_private_cache_senders: clauses_private_cache_in.0,
             num_clauses_per_watcher,
         }
     }
@@ -192,24 +191,23 @@ impl SimComponent for WatcherInterface {
                         }
                     }
                 }
-                _ => unreachable!(),
-            }
-        }
-        // recv the private cache, it should contains clause value and watcher
-        if let Ok(mem_req) = self.private_cache_out_receiver.recv() {
-            busy = true;
-            let msg_id = mem_req.msg.id;
-            tracing::debug!(
-                "WatcherInterface Recv mem req from private cache! id: {} cycle: {current_cycle}",
-                mem_req.msg.id,
-            );
-            match mem_req.msg.req_type {
                 MemReqType::ClauseReadValue(clause_inner_id) => {
-                    match self.clause_private_cache_senders[clause_inner_id].send(mem_req) {
+                    match self.clause_mem_senders[clause_inner_id].send(mem_req) {
                         Ok(_) => {
                             tracing::debug!(
-                                "WatcherInterface Send mem req id {msg_id} to clause:{clause_inner_id}! {current_cycle}",
+                                "WatcherInterface Send mem req to clause:{clause_inner_id}! {current_cycle}",
                             );
+                            updated = true;
+                        }
+                        Err(mem_req) => {
+                            self.mem_icnt_interface_receiver.ret(mem_req);
+                        }
+                    }
+                }
+                MemReqType::WatcherReadBlocker => {
+                    match self.watcher_mem_sender.send(mem_req) {
+                        Ok(_) => {
+                            // tracing::debug!("WatcherInterface Send mem req to watcher! id: {msg_id} cycle: {current_cycle}");
                             updated = true;
                         }
                         Err(mem_req) => {
@@ -217,16 +215,42 @@ impl SimComponent for WatcherInterface {
                         }
                     }
                 }
+            }
+        }
+        // recv the private cache, it should contains clause value and watcher
+        if let Ok(mem_req) = self.private_cache_out_receiver.recv() {
+            // busy = true;
+            // let msg_id = mem_req.msg.id;
+            tracing::debug!(
+                "WatcherInterface Recv mem req from private cache! id: {} cycle: {current_cycle}",
+                mem_req.msg.id,
+            );
+            match mem_req.msg.req_type {
+                MemReqType::ClauseReadValue(_clause_inner_id) => {
+                    unreachable!();
+                    // match self.clause_private_cache_senders[clause_inner_id].send(mem_req) {
+                    //     Ok(_) => {
+                    //         tracing::debug!(
+                    //             "WatcherInterface Send mem req id {msg_id} to clause:{clause_inner_id}! {current_cycle}",
+                    //         );
+                    //         updated = true;
+                    //     }
+                    //     Err(mem_req) => {
+                    //         self.private_cache_out_receiver.ret(mem_req);
+                    //     }
+                    // }
+                }
                 MemReqType::WatcherReadBlocker => {
-                    match self.watcher_private_cache_sender.send(mem_req) {
-                        Ok(_) => {
-                            tracing::debug!("WatcherInterface Send mem req to watcher! id: {msg_id} cycle: {current_cycle}");
-                            updated = true;
-                        }
-                        Err(mem_req) => {
-                            self.private_cache_out_receiver.ret(mem_req);
-                        }
-                    }
+                    // match self.watcher_private_cache_sender.send(mem_req) {
+                    //     Ok(_) => {
+                    //         tracing::debug!("WatcherInterface Send mem req to watcher! id: {msg_id} cycle: {current_cycle}");
+                    //         updated = true;
+                    //     }
+                    //     Err(mem_req) => {
+                    //         self.private_cache_out_receiver.ret(mem_req);
+                    //     }
+                    // }
+                    unreachable!();
                 }
                 _ => unreachable!(),
             }
@@ -450,7 +474,14 @@ mod test {
         // send it back
         icnt_port_base.out_port.send(req).unwrap();
         sim_runner.run().unwrap();
-        // because there are one clause task, so it will read the private cache,
+
+        // read the blocker
+        let req = icnt_port_base.in_port.recv().unwrap();
+        tracing::debug!("{:?}", req);
+        icnt_port_base.out_port.send(req).unwrap();
+
+        sim_runner.run().unwrap();
+
         // and it will send the request to the clause unit.
         let req = task_port_base.in_port.recv().unwrap();
         tracing::debug!("{:?}", req);
@@ -463,6 +494,19 @@ mod test {
         // send it back
         icnt_port_base.out_port.send(req).unwrap();
         sim_runner.run().unwrap();
-        // not the clause unit will finished read clause, then access the private cache for value, then finish the task! done!
+        // not the clause unit will finished read clause, then access the l3 cache for value, then finish the task! done!
+        let req = icnt_port_base.in_port.recv().unwrap();
+        tracing::debug!("{:?}", req);
+        // send it back
+        icnt_port_base.out_port.send(req).unwrap();
+        let req = icnt_port_base.in_port.recv().unwrap();
+        tracing::debug!("{:?}", req);
+        // send it back
+        icnt_port_base.out_port.send(req).unwrap();
+        let req = icnt_port_base.in_port.recv().unwrap();
+        tracing::debug!("{:?}", req);
+        // send it back
+        icnt_port_base.out_port.send(req).unwrap();
+        sim_runner.run().unwrap();
     }
 }

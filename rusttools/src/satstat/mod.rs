@@ -285,7 +285,7 @@ mod test {
     use ndarray::array;
     use ndarray_stats::histogram::{Bins, Edges, Grid, Histogram};
 
-    use crate::{satacc, test_utils::init};
+    use crate::test_utils::init;
 
     #[test]
     fn test_histogram() {

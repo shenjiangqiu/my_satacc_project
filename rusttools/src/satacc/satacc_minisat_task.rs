@@ -133,13 +133,16 @@ impl ClauseTask {
         context: &mut SataccStatus,
         watcher_pe_id: usize,
         clause_pe_id: usize,
+        total_watchers: usize,
     ) -> Vec<IcntMsgWrapper<MemReq>> {
         let clause_data = self.clause_data.as_ref().unwrap();
         let clause_value_data = clause_data.clause_value_addr.clone();
+
         clause_value_data
             .into_iter()
             .map(|addr| {
-                let mem_id = 0;
+                let mem_id = ((addr >> 6) & ((1 << 3) - 1)) as usize;
+
                 let req = MemReq {
                     addr,
                     id: context.next_mem_id(),
@@ -150,7 +153,7 @@ impl ClauseTask {
                 };
                 IcntMsgWrapper {
                     msg: req,
-                    mem_target_port: 0,
+                    mem_target_port: total_watchers + mem_id,
                 }
             })
             .collect()

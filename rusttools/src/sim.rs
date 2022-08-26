@@ -11,12 +11,10 @@ pub trait SimComponent {
     ) -> (bool, bool);
 }
 pub trait Connectable: SimComponent + Sized {
-    fn connect<T>(self, other: T) -> AndSim<Self, T>
-    where
-        T: SimComponent<SharedStatus = Self::SharedStatus> + Sized,
-    {
-        AndSim::new(self, other)
-    }
+    fn connect<T: SimComponent<SharedStatus = Self::SharedStatus> + Sized>(
+        self,
+        other: T,
+    ) -> AndSim<Self, T>;
 }
 
 impl<Status> SimComponent for Box<dyn SimComponent<SharedStatus = Status>> {
@@ -30,7 +28,17 @@ impl<Status> SimComponent for Box<dyn SimComponent<SharedStatus = Status>> {
     }
 }
 
-impl<T> Connectable for T where T: SimComponent + Sized {}
+impl<U> Connectable for U
+where
+    U: SimComponent + Sized,
+{
+    fn connect<T: SimComponent<SharedStatus = Self::SharedStatus> + Sized>(
+        self,
+        other: T,
+    ) -> AndSim<Self, T> {
+        AndSim { a: self, b: other }
+    }
+}
 #[derive(Debug)]
 pub struct AndSim<A, B>
 where

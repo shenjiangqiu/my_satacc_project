@@ -30,7 +30,7 @@ pub struct ClauseUnit {
     current_waiting_value_memid_to_task_id: BTreeMap<usize, usize>,
     mem_req_id_to_clause_task: BTreeMap<usize, ClauseTask>,
     total_clause_data_mem_ongoing: usize,
-    total_private_mem_ongoing: usize,
+    total_clause_value_mem_ongoing: usize,
     current_task_id: usize,
     pipeline_clause_value_read: bool,
 }
@@ -66,7 +66,7 @@ impl ClauseUnit {
             current_reading_value_task: None,
             mem_req_id_to_clause_task: BTreeMap::new(),
             total_clause_data_mem_ongoing: 0,
-            total_private_mem_ongoing: 0,
+            total_clause_value_mem_ongoing: 0,
             current_task_id: 0,
             current_waiting_reading_value_reqs: VecDeque::new(),
             current_waiting_reading_value_tasks: BTreeMap::new(),
@@ -141,6 +141,7 @@ impl SimComponent for ClauseUnit {
                             context,
                             self.watcher_pe_id,
                             self.clause_pe_id,
+                            self.total_watchers,
                         );
                         let req_len = mem_req.len();
                         assert!(req_len != 0);
@@ -188,6 +189,7 @@ impl SimComponent for ClauseUnit {
                             context,
                             self.watcher_pe_id,
                             self.clause_pe_id,
+                            self.total_watchers,
                         );
                         context.statistics.clause_statistics[self.watcher_pe_id].single_clause
                             [self.clause_pe_id]
@@ -203,17 +205,17 @@ impl SimComponent for ClauseUnit {
             }
         };
         // process the clause value task
-        if self.total_private_mem_ongoing < 256 && self.clause_value_ready_queue.len() < 256 {
+        if self.total_clause_value_mem_ongoing < 256 && self.clause_value_ready_queue.len() < 256 {
             match self.pipeline_clause_value_read {
                 true => {
                     if let Some(req) = self.current_waiting_reading_value_reqs.pop_front() {
                         busy = true;
                         // let id = req.msg.id;
                         let req_id = req.msg.id;
-                        match self.private_cache_port.out_port.send(req) {
+                        match self.mem_icnt_port.out_port.send(req) {
                             Ok(_) => {
                                 updated = true;
-                                self.total_private_mem_ongoing += 1;
+                                self.total_clause_value_mem_ongoing += 1;
                                 tracing::debug!(
                                     req_id,
                                     current_cycle,
@@ -239,11 +241,11 @@ impl SimComponent for ClauseUnit {
                         if let Some(req) = reqs.waiting_to_send_reqs.pop_front() {
                             busy = true;
                             let id = req.msg.id;
-                            match self.private_cache_port.out_port.send(req) {
+                            match self.mem_icnt_port.out_port.send(req) {
                                 Ok(_) => {
                                     updated = true;
                                     reqs.unfinished_req_id.insert(id);
-                                    self.total_private_mem_ongoing += 1;
+                                    self.total_clause_value_mem_ongoing += 1;
                                 }
                                 Err(e) => {
                                     // cannot send to cache now
@@ -266,7 +268,7 @@ impl SimComponent for ClauseUnit {
                 "ClauseUnit cannot send read value to private cache {current_cycle},\
                 total_private_mem_ongoing: {},\
                 clause_value_ready_queue:len: {}",
-                self.total_private_mem_ongoing,
+                self.total_clause_value_mem_ongoing,
                 self.clause_value_ready_queue.len()
             );
         }
@@ -293,16 +295,52 @@ impl SimComponent for ClauseUnit {
         }
         // process memory ret
         if let Ok(mem_req) = self.mem_icnt_port.in_port.recv() {
-            self.total_clause_data_mem_ongoing -= 1;
             tracing::debug!(current_cycle, "ClauseUnit Receive mem_req! ");
+            let req_id = mem_req.msg.id;
             match mem_req.msg.req_type {
-                crate::satacc::MemReqType::ClauseReadData(_) => {
+                MemReqType::ClauseReadData(_) => {
+                    self.total_clause_data_mem_ongoing -= 1;
+
                     let clause_task = self
                         .mem_req_id_to_clause_task
                         .remove(&mem_req.msg.id)
                         .unwrap();
 
                     self.clause_data_ready_queue.push_back(clause_task);
+                }
+                MemReqType::ClauseReadValue(_clause_id) => {
+                    self.total_clause_value_mem_ongoing -= 1;
+                    match self.pipeline_clause_value_read {
+                        true => {
+                            let task_id = self
+                                .current_waiting_value_memid_to_task_id
+                                .remove(&req_id)
+                                .unwrap();
+                            let (req_len, _task) = self
+                                .current_waiting_reading_value_tasks
+                                .get_mut(&task_id)
+                                .unwrap();
+                            *req_len -= 1;
+                            tracing::debug!(req_len, task_id, "receive a req");
+                            if *req_len == 0 {
+                                let (_, clause_task) = self
+                                    .current_waiting_reading_value_tasks
+                                    .remove(&task_id)
+                                    .unwrap();
+                                self.clause_value_ready_queue.push_back(clause_task);
+                            }
+                        }
+                        false => {
+                            let current_waiting = self.current_reading_value_task.as_mut().unwrap();
+                            current_waiting.unfinished_req_id.remove(&mem_req.msg.id);
+                            if current_waiting.unfinished_req_id.is_empty() {
+                                let current_waiting =
+                                    self.current_reading_value_task.take().unwrap();
+                                self.clause_value_ready_queue
+                                    .push_back(current_waiting.clause_task);
+                            };
+                        }
+                    }
                 }
                 _ => unreachable!(),
             }
@@ -311,49 +349,20 @@ impl SimComponent for ClauseUnit {
         }
 
         // process private cache ret
-        if let Ok(mem_req) = self.private_cache_port.in_port.recv() {
-            let req_id = mem_req.msg.id;
-            tracing::debug!(
-                req_id,
-                current_cycle,
-                "ClauseUnit Receive mem_req from private cache!"
-            );
-            self.total_private_mem_ongoing -= 1;
-            match mem_req.msg.req_type {
-                MemReqType::ClauseReadValue(_clause_id) => match self.pipeline_clause_value_read {
-                    true => {
-                        let task_id = self
-                            .current_waiting_value_memid_to_task_id
-                            .remove(&req_id)
-                            .unwrap();
-                        let (req_len, _task) = self
-                            .current_waiting_reading_value_tasks
-                            .get_mut(&task_id)
-                            .unwrap();
-                        *req_len -= 1;
-                        tracing::debug!(req_len, task_id, "receive a req");
-                        if *req_len == 0 {
-                            let (_, clause_task) = self
-                                .current_waiting_reading_value_tasks
-                                .remove(&task_id)
-                                .unwrap();
-                            self.clause_value_ready_queue.push_back(clause_task);
-                        }
-                    }
-                    false => {
-                        let current_waiting = self.current_reading_value_task.as_mut().unwrap();
-                        current_waiting.unfinished_req_id.remove(&mem_req.msg.id);
-                        if current_waiting.unfinished_req_id.is_empty() {
-                            let current_waiting = self.current_reading_value_task.take().unwrap();
-                            self.clause_value_ready_queue
-                                .push_back(current_waiting.clause_task);
-                        };
-                    }
-                },
-                _ => unreachable!(),
-            }
-            busy = true;
-            updated = true;
+        if let Ok(_mem_req) = self.private_cache_port.in_port.recv() {
+            // let req_id = mem_req.msg.id;
+            // tracing::debug!(
+            //     req_id,
+            //     current_cycle,
+            //     "ClauseUnit Receive mem_req from private cache!"
+            // );
+            // self.total_private_mem_ongoing -= 1;
+            // match mem_req.msg.req_type {
+            //     _ => unreachable!(),
+            // }
+            // busy = true;
+            // updated = true;
+            unreachable!();
         }
 
         match updated {
@@ -430,6 +439,7 @@ mod test {
     #[test]
     fn test_clause_unit_no_pipe() {
         test_utils::init();
+        tracing::info!("test_clause_unit_no_pipe");
         let channel_builder = ChannelBuilder::new();
         let clause_task_port = channel_builder.sim_channel(10);
         let clause_task_in = clause_task_port.1;
@@ -472,13 +482,13 @@ mod test {
         mem_icnt_port_pair.1.out_port.send(req).unwrap();
         sim_runner.run().unwrap();
         // now private cache should receive 3 requests
-        let req1 = private_cache_port_pair.1.in_port.recv().unwrap();
-        let req2 = private_cache_port_pair.1.in_port.recv().unwrap();
-        let req3 = private_cache_port_pair.1.in_port.recv().unwrap();
+        let req1 = mem_icnt_port_pair.1.in_port.recv().unwrap();
+        let req2 = mem_icnt_port_pair.1.in_port.recv().unwrap();
+        let req3 = mem_icnt_port_pair.1.in_port.recv().unwrap();
         tracing::debug!("should be read value: {:?} {:?} {:?}", req1, req2, req3);
-        private_cache_port_pair.1.out_port.send(req1).unwrap();
-        private_cache_port_pair.1.out_port.send(req2).unwrap();
-        private_cache_port_pair.1.out_port.send(req3).unwrap();
+        mem_icnt_port_pair.1.out_port.send(req1).unwrap();
+        mem_icnt_port_pair.1.out_port.send(req2).unwrap();
+        mem_icnt_port_pair.1.out_port.send(req3).unwrap();
 
         sim_runner.run().unwrap();
         // now clause unit should receive 3 requests and finished the process
@@ -529,13 +539,13 @@ mod test {
         mem_icnt_port_pair.1.out_port.send(req).unwrap();
         sim_runner.run().unwrap();
         // now private cache should receive 3 requests
-        let req1 = private_cache_port_pair.1.in_port.recv().unwrap();
-        let req2 = private_cache_port_pair.1.in_port.recv().unwrap();
-        let req3 = private_cache_port_pair.1.in_port.recv().unwrap();
+        let req1 = mem_icnt_port_pair.1.in_port.recv().unwrap();
+        let req2 = mem_icnt_port_pair.1.in_port.recv().unwrap();
+        let req3 = mem_icnt_port_pair.1.in_port.recv().unwrap();
         tracing::debug!("should be read value: {:?} {:?} {:?}", req1, req2, req3);
-        private_cache_port_pair.1.out_port.send(req1).unwrap();
-        private_cache_port_pair.1.out_port.send(req2).unwrap();
-        private_cache_port_pair.1.out_port.send(req3).unwrap();
+        mem_icnt_port_pair.1.out_port.send(req1).unwrap();
+        mem_icnt_port_pair.1.out_port.send(req2).unwrap();
+        mem_icnt_port_pair.1.out_port.send(req3).unwrap();
 
         sim_runner.run().unwrap();
         // now clause unit should receive 3 requests and finished the process
