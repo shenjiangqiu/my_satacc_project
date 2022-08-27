@@ -269,6 +269,8 @@ impl SimComponent for WatcherInterface {
         if busy && !updated {
             tracing::debug!("WatcherInterface is busy but not updated! {current_cycle}");
         }
+        tracing::debug!(busy, updated);
+
         (busy, updated)
         // (
         //     busy || watcher_busy || clause_busy || cache_busy,

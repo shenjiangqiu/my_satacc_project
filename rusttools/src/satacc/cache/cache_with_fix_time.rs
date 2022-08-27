@@ -56,7 +56,7 @@ impl SimComponent for CacheWithFixTime {
             out_port: _,
         } in &mut self.req_ports
         {
-            if self.on_going_reqs.len() < 1024 {
+            if self.on_going_reqs.len() < 2048 {
                 if let Ok(IcntMsgWrapper {
                     msg,
                     mem_target_port: _,

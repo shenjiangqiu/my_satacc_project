@@ -418,6 +418,8 @@ impl SimComponent for ClauseUnit {
                 )
             }
         }
+        tracing::debug!(busy, updated);
+
         (busy, updated)
     }
 }

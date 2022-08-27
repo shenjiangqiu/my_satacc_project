@@ -80,7 +80,7 @@ where
         let mut busy = !self.in_transit_messages.is_empty();
         let mut updated = false;
         // from input to icnt transit
-        if self.in_transit_messages.len() < 1024 {
+        if self.in_transit_messages.len() < 2048 {
             for (
                 input_port,
                 InOutPort {

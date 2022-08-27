@@ -108,6 +108,13 @@ impl SimComponent for Watcher {
                     }
                 }
             }
+        } else {
+            let meta_finished_queue_len = self.meta_finished_queue.len();
+            tracing::debug!(
+                self.total_ongoing_meta_mem_reqs,
+                meta_finished_queue_len,
+                "cannot receive new task "
+            )
         }
         // then check the tasks that finihed the meta data read
         if self.total_ongoing_data_mem_reqs < 256 && self.data_finished_queue.len() < 256 {
@@ -135,6 +142,13 @@ impl SimComponent for Watcher {
                     }
                 }
             }
+        } else {
+            let data_finished_queue_len = self.data_finished_queue.len();
+            tracing::debug!(
+                self.total_ongoing_data_mem_reqs,
+                data_finished_queue_len,
+                "cannot receive send watcher data request"
+            )
         }
 
         // then check the tasks that finished the watcher list read
@@ -148,6 +162,12 @@ impl SimComponent for Watcher {
                     signale_watcher_tasks.len();
                 self.single_watcher_task_queue.extend(signale_watcher_tasks);
             }
+        } else {
+            let single_watcher_task_queue_len = self.single_watcher_task_queue.len();
+            tracing::debug!(
+                single_watcher_task_queue_len,
+                "cannot generate new clause task "
+            )
         }
 
         // then process the single watcher tasks
@@ -179,6 +199,14 @@ impl SimComponent for Watcher {
                     }
                 }
             }
+        } else {
+            let single_watcher_value_finished_queue_len =
+                self.single_watcher_value_finished_queue.len();
+            tracing::debug!(
+                self.total_blocker_requests_ongoing,
+                single_watcher_value_finished_queue_len,
+                "cannot send blocker request to cache now"
+            );
         }
 
         // update current processing task
@@ -196,6 +224,13 @@ impl SimComponent for Watcher {
                         .push_back(single_task);
                 }
             }
+        } else {
+            let single_watcher_process_finished_queue_len =
+                self.single_watcher_process_finished_queue.len();
+            tracing::debug!(
+                single_watcher_process_finished_queue_len,
+                "generate to finished queue"
+            )
         }
 
         // process the watcher
@@ -266,6 +301,7 @@ impl SimComponent for Watcher {
                             .remove(&mem_req.msg.id)
                             .unwrap(),
                     );
+                    self.total_blocker_requests_ongoing -= 1;
                 }
 
                 _ => unreachable!(),
@@ -341,6 +377,7 @@ impl SimComponent for Watcher {
                 "Watcher is busy! but not updated {current_cycle},idle reason:{reason:?}"
             );
         }
+        tracing::debug!(busy, updated);
         (busy, updated)
     }
 }
