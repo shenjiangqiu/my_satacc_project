@@ -52,6 +52,8 @@ impl SingleRoundTask {
 /// - each watcher have a blocker and a Clause task:[`ClauseTask`]
 #[derive(Debug, Default)]
 pub struct WatcherTask {
+    /// the level of the current task
+    pub(crate) level: usize,
     /// the watcher list meta data addr
     pub(crate) meta_data_addr: u64,
     /// the watcher list value
@@ -199,6 +201,7 @@ impl SataccMinisatTask {
     #[no_mangle]
     pub extern "C" fn add_watcher_task(
         &mut self,
+        level: usize,
         meta_data_addr: u64,
         watcher_addr: u64,
         watcher_id: usize,
@@ -208,6 +211,7 @@ impl SataccMinisatTask {
             .unwrap()
             .assignments
             .push_back(WatcherTask {
+                level,
                 meta_data_addr,
                 watcher_addr,
                 watcher_id,
@@ -301,6 +305,10 @@ impl SataccMinisatTask {
 impl WatcherTask {
     pub fn get_watcher_pe_id(&self, total_watchers: usize) -> usize {
         return (self.watcher_id / 2) % total_watchers;
+    }
+    pub fn get_total_level_tasks(&self) -> usize {
+        // the watcher self and all single watchers
+        self.single_watcher_tasks.len() + 1
     }
     pub fn get_meta_data_task(
         &self,

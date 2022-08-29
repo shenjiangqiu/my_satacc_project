@@ -146,6 +146,7 @@ void add_single_watcher_task_no_clause(SataccMinisatTask *self,
                                        size_t watcher_id);
 
 void add_watcher_task(SataccMinisatTask *self,
+                      size_t level,
                       uint64_t meta_data_addr,
                       uint64_t watcher_addr,
                       size_t watcher_id);

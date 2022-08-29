@@ -281,6 +281,7 @@ impl SimComponent for ClauseUnit {
                 self.current_processing_task = Some((finished_cycle, task));
             } else {
                 // finished
+                context.current_level_finished_tasks += 1;
                 tracing::debug!(current_cycle, "ClauseUnit finished task! ");
             }
         }

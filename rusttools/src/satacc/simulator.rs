@@ -229,6 +229,7 @@ impl Simulator {
         let trail = Trail::new(
             trail_to_watcher_ports.0,
             outer_to_trail_ports.1,
+            self.config.level_sync,
             self.config.n_watchers,
         );
 
@@ -351,6 +352,7 @@ mod test {
         task_sender
             .send(SingleRoundTask {
                 assignments: [WatcherTask {
+                    level: 0,
                     meta_data_addr: 0,
                     watcher_addr: 100,
                     watcher_id: 1,
@@ -380,7 +382,7 @@ mod test {
         unsafe {
             let unowned_task_builder = &mut *task_builder;
             unowned_task_builder.start_new_assgin();
-            unowned_task_builder.add_watcher_task(0, 1, 0);
+            unowned_task_builder.add_watcher_task(0, 0, 1, 0);
             unowned_task_builder.add_single_watcher_task(0, 0, 0, 1, 0);
             unowned_task_builder.add_single_watcher_clause_value_addr(0, 0);
         }
@@ -396,11 +398,95 @@ mod test {
         unsafe {
             let unowned_task_builder = &mut *task_builder;
             unowned_task_builder.start_new_assgin();
-            unowned_task_builder.add_watcher_task(0, 1, 0);
+            unowned_task_builder.add_watcher_task(0, 0, 1, 0);
             unowned_task_builder.add_single_watcher_task(0, 0, 0, 1, 0);
             unowned_task_builder.add_single_watcher_clause_value_addr(0, 0);
         }
         Simulator::run_full_expr(task_builder);
         SataccMinisatTask::release_task(task_builder);
+    }
+
+    #[test]
+    fn test_simulator_level_sync() {
+        test_utils::init();
+
+        let config = Config {
+            level_sync: true,
+            ..Default::default()
+        };
+
+        let simulator = Simulator::new_from_config(config.clone());
+        let (task_sender, comp) = simulator.build(config.init_running_mode);
+        let status = SataccStatus::new(config);
+        let mut sim_runner = SimRunner::new(comp, status);
+        task_sender
+            .send(SingleRoundTask {
+                assignments: [
+                    WatcherTask {
+                        level: 1,
+                        meta_data_addr: 0,
+                        watcher_addr: 100,
+                        watcher_id: 1,
+                        single_watcher_tasks: [
+                            ClauseTask {
+                                watcher_id: 1,
+                                blocker_addr: 1000,
+                                clause_data: Some(ClauseData {
+                                    clause_id: 1,
+                                    clause_addr: 2000,
+                                    clause_processing_time: 200,
+                                    clause_value_addr: [3000, 4000, 5000].into(),
+                                    clause_value_id: [1, 2, 3].into(),
+                                }),
+                            },
+                            ClauseTask {
+                                watcher_id: 1,
+                                blocker_addr: 1000,
+                                clause_data: None,
+                            },
+                        ]
+                        .into(),
+                    },
+                    WatcherTask {
+                        level: 1,
+                        meta_data_addr: 0,
+                        watcher_addr: 100,
+                        watcher_id: 1,
+                        single_watcher_tasks: [ClauseTask {
+                            watcher_id: 1,
+                            blocker_addr: 1000,
+                            clause_data: Some(ClauseData {
+                                clause_id: 1,
+                                clause_addr: 2000,
+                                clause_processing_time: 200,
+                                clause_value_addr: [3000, 4000, 5000].into(),
+                                clause_value_id: [1, 2, 3].into(),
+                            }),
+                        }]
+                        .into(),
+                    },
+                    WatcherTask {
+                        level: 2,
+                        meta_data_addr: 0,
+                        watcher_addr: 100,
+                        watcher_id: 1,
+                        single_watcher_tasks: [ClauseTask {
+                            watcher_id: 1,
+                            blocker_addr: 1000,
+                            clause_data: Some(ClauseData {
+                                clause_id: 1,
+                                clause_addr: 2000,
+                                clause_processing_time: 200,
+                                clause_value_addr: [3000, 4000, 5000].into(),
+                                clause_value_id: [1, 2, 3].into(),
+                            }),
+                        }]
+                        .into(),
+                    },
+                ]
+                .into(),
+            })
+            .unwrap_or_else(|_| {});
+        sim_runner.run().unwrap();
     }
 }

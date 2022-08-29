@@ -161,6 +161,7 @@ impl SimComponent for Watcher {
                 context.statistics.watcher_statistics[self.watcher_pe_id].total_watchers +=
                     signale_watcher_tasks.len();
                 self.single_watcher_task_queue.extend(signale_watcher_tasks);
+                context.current_level_finished_tasks += 1;
             }
         } else {
             let single_watcher_task_queue_len = self.single_watcher_task_queue.len();
@@ -267,6 +268,8 @@ impl SimComponent for Watcher {
                         reason = IdleReason::CannotSendClause;
                     }
                 }
+            } else {
+                context.current_level_finished_tasks += 1;
             }
         }
 

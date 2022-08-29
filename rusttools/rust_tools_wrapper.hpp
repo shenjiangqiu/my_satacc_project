@@ -26,8 +26,8 @@ public:
 
   void add_single_watcher_task_no_clause(uint64_t blocker_addr,
                                          size_t watcher_id);
-  void add_watcher_task(uint64_t meta_data_addr, uint64_t watcher_addr,
-                        size_t watcher_id);
+  void add_watcher_task(size_t level, uint64_t meta_data_addr,
+                        uint64_t watcher_addr, size_t watcher_id);
   bool run_full_expr();
   void start_new_assgin();
 

@@ -9,6 +9,7 @@ value_miss_hit_l3 = true
 ideal_icnt = false
 ideal_memory = false
 ideal_l3cache = false
+level_sync = false
 multi_port = 1
 dram_config = 'HBM'
 watcher_to_clause_icnt = 'Mesh'

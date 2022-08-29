@@ -330,6 +330,7 @@ mod test {
         // send the task to watcher interface, and it will be send to watcher, the wather will send a mem req for watcher meta data
         watcher_task_sender
             .send(WatcherTask {
+                level: 0,
                 meta_data_addr: 0,
                 watcher_addr: 0,
                 watcher_id: 0,
@@ -391,6 +392,7 @@ mod test {
         };
         watcher_task_sender
             .send(WatcherTask {
+                level: 0,
                 meta_data_addr: 0,
                 watcher_addr: 0,
                 watcher_id: 0,
@@ -458,6 +460,7 @@ mod test {
         };
         watcher_task_sender
             .send(WatcherTask {
+                level: 0,
                 meta_data_addr: 0,
                 watcher_addr: 0,
                 watcher_id: 0,

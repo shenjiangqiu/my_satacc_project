@@ -51,10 +51,11 @@ void SataccMinisatTaskWrapper::add_single_watcher_task_no_clause(
   sjqrusttools::add_single_watcher_task_no_clause(task, blocker_addr,
                                                   watcher_id);
 }
-void SataccMinisatTaskWrapper::add_watcher_task(uint64_t meta_data_addr,
+void SataccMinisatTaskWrapper::add_watcher_task(size_t level,
+                                                uint64_t meta_data_addr,
                                                 uint64_t watcher_addr,
                                                 size_t watcher_id) {
-  sjqrusttools::add_watcher_task(task, meta_data_addr, watcher_addr,
+  sjqrusttools::add_watcher_task(task, level, meta_data_addr, watcher_addr,
                                  watcher_id);
 }
 bool SataccMinisatTaskWrapper::run_full_expr() {
