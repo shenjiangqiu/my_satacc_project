@@ -174,10 +174,16 @@ impl Simulator {
             }
         }
     }
+
+    /// delete the pointer
     #[no_mangle]
     pub extern "C" fn release_simulator(sim: *mut SimulatorWapper) {
         unsafe {
-            let _sim = Box::from_raw(sim);
+            let sim = Box::from_raw(sim);
+            let (_, mut status, cycle) = sim.sim_runner.into_inner();
+            status.statistics.total_cycle = cycle;
+            status.save_statistics("statistics.json");
+            serde_json::to_writer_pretty(File::create("cycle.json").unwrap(), &cycle).unwrap();
         }
     }
 
